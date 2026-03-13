@@ -51,16 +51,17 @@ const SplashScreen: React.FC = () => {
                 <div style={{
                     width: '140px',
                     height: '140px',
-                    backgroundColor: '#FACC15',
+                    backgroundColor: '#FFFFFF',
                     borderRadius: '30px',
                     display: 'flex',
                     justifyContent: 'center',
                     alignItems: 'center',
                     position: 'relative',
                     boxShadow: '4px 4px 0px rgba(0,0,0,0.1)',
-                    marginBottom: '32px'
+                    marginBottom: '32px',
+                    border: '2px solid #000'
                 }}>
-                    <img src={LogoT} alt="Tr!vvo Logo" style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
+                    <img src={LogoT} alt="Tr!vvo Logo" style={{ width: '180px', height: '180px', objectFit: 'contain' }} />
                     <div style={{
                         position: 'absolute',
                         top: '-10px',
