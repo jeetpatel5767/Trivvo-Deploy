@@ -1,0 +1,701 @@
+/* ============================================================
+   Tr!vvo — Design System v2 ("Nightfall")
+   ------------------------------------------------------------
+   Warm-dark, map-first, money-forward.
+   Everything is scoped under `.v2` so v1 is never affected.
+   ============================================================ */
+
+.v2 {
+  /* ---- Surfaces: warm ink, not pure black ---- */
+  --v2-bg: #0C0B0E;
+  --v2-surface-1: #141318;
+  --v2-surface-2: #1C1B21;
+  --v2-surface-3: #27262F;
+  --v2-hairline: rgba(255, 255, 255, 0.08);
+  --v2-hairline-strong: rgba(255, 255, 255, 0.14);
+
+  /* ---- Text ---- */
+  --v2-text-hi: #F7F6F3;
+  --v2-text-mid: #A5A3AE;
+  --v2-text-lo: #6E6B78;
+
+  /* ---- Accents ---- */
+  --v2-lime: #CCFF4D;
+  --v2-lime-dim: #A8D633;
+  --v2-lime-soft: rgba(204, 255, 77, 0.12);
+  --v2-blue: #5B8CFF;
+  --v2-blue-soft: rgba(91, 140, 255, 0.14);
+  --v2-coral: #FF6B5A;
+  --v2-coral-soft: rgba(255, 107, 90, 0.14);
+  --v2-amber: #FFB340;
+  --v2-amber-soft: rgba(255, 179, 64, 0.14);
+
+  /* ---- Radii ---- */
+  --v2-r-sm: 12px;
+  --v2-r-md: 18px;
+  --v2-r-lg: 24px;
+  --v2-r-xl: 32px;
+  --v2-r-full: 999px;
+
+  /* ---- Elevation: soft and layered, never hard-edged ---- */
+  --v2-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --v2-shadow-2: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --v2-shadow-3: 0 12px 40px rgba(0, 0, 0, 0.55);
+  --v2-glow-lime: 0 0 0 1px rgba(204, 255, 77, 0.3), 0 8px 32px rgba(204, 255, 77, 0.18);
+
+  /* ---- Motion ---- */
+  --v2-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --v2-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ---- Layout ---- */
+  --v2-gutter: 20px;
+  --v2-tabbar-h: 76px;
+
+  position: relative;
+  min-height: 100vh;
+  background: var(--v2-bg);
+  color: var(--v2-text-hi);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ambient depth — a faint warm glow so the dark never reads flat.
+   Absolute (not fixed) so it stays inside the 420px frame on desktop. */
+.v2::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(70% 45% at 50% -8%, rgba(204, 255, 77, 0.07) 0%, transparent 70%),
+    radial-gradient(60% 40% at 90% 15%, rgba(91, 140, 255, 0.06) 0%, transparent 70%);
+}
+
+.v2 > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Icons never squash inside flex rows. */
+.v2 svg { flex-shrink: 0; }
+
+/* Explicit icon sizes for use outside a styled context. */
+.v2 .v2-ic-sm { width: 15px; height: 15px; }
+.v2 .v2-ic-md { width: 18px; height: 18px; }
+.v2 .v2-ic-lg { width: 24px; height: 24px; }
+
+/* ============================================================
+   SCREEN SHELL
+   ============================================================ */
+
+.v2-screen {
+  min-height: 100vh;
+  padding: 0 var(--v2-gutter);
+  padding-top: max(20px, env(safe-area-inset-top));
+  padding-bottom: calc(var(--v2-tabbar-h) + 32px);
+  animation: v2-enter 0.35s var(--v2-ease);
+}
+
+.v2-screen--flush {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.v2-screen--centered {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-bottom: 32px;
+}
+
+@keyframes v2-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ============================================================
+   TOP BAR
+   ============================================================ */
+
+.v2-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  margin-bottom: 22px;
+}
+
+.v2-topbar__titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.v2-topbar__eyebrow {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--v2-text-lo);
+  margin-bottom: 3px;
+}
+
+.v2-topbar__title {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  color: var(--v2-text-hi);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   ICON BUTTON
+   ============================================================ */
+
+.v2-iconbtn {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--v2-surface-2);
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-r-full);
+  color: var(--v2-text-hi);
+  cursor: pointer;
+  transition: background 0.2s, transform 0.12s var(--v2-spring), border-color 0.2s;
+}
+
+.v2-iconbtn:hover {
+  background: var(--v2-surface-3);
+  border-color: var(--v2-hairline-strong);
+}
+
+.v2-iconbtn:active { transform: scale(0.92); }
+
+.v2-iconbtn svg {
+  width: 19px;
+  height: 19px;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+
+.v2-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 16px 24px;
+  border: 1px solid transparent;
+  border-radius: var(--v2-r-full);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 0.14s var(--v2-spring), filter 0.2s, background 0.2s, border-color 0.2s;
+}
+
+.v2-btn:active:not(:disabled) { transform: scale(0.975); }
+
+.v2-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.v2-btn svg { width: 18px; height: 18px; }
+
+/* Primary — reserved for the single most important action on a screen. */
+.v2-btn--primary {
+  background: var(--v2-lime);
+  color: #0C0B0E;
+  font-weight: 700;
+  box-shadow: var(--v2-glow-lime);
+}
+
+.v2-btn--primary:hover:not(:disabled) { filter: brightness(1.07); }
+
+.v2-btn--secondary {
+  background: var(--v2-surface-2);
+  color: var(--v2-text-hi);
+  border-color: var(--v2-hairline);
+}
+
+.v2-btn--secondary:hover:not(:disabled) {
+  background: var(--v2-surface-3);
+  border-color: var(--v2-hairline-strong);
+}
+
+.v2-btn--ghost {
+  background: transparent;
+  color: var(--v2-text-mid);
+}
+
+.v2-btn--ghost:hover:not(:disabled) {
+  background: var(--v2-surface-2);
+  color: var(--v2-text-hi);
+}
+
+.v2-btn--block { width: 100%; }
+
+.v2-btn--lg {
+  padding: 19px 28px;
+  font-size: 16px;
+}
+
+.v2-btn--sm {
+  padding: 10px 16px;
+  font-size: 13px;
+}
+
+/* ============================================================
+   CARD
+   ============================================================ */
+
+.v2-card {
+  background: var(--v2-surface-1);
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-r-lg);
+  padding: 20px;
+  box-shadow: var(--v2-shadow-2);
+}
+
+.v2-card--interactive {
+  cursor: pointer;
+  transition: transform 0.16s var(--v2-ease), border-color 0.2s, background 0.2s;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+  color: inherit;
+  display: block;
+}
+
+.v2-card--interactive:hover {
+  background: var(--v2-surface-2);
+  border-color: var(--v2-hairline-strong);
+}
+
+.v2-card--interactive:active { transform: scale(0.985); }
+
+.v2-card--flat {
+  box-shadow: none;
+  background: var(--v2-surface-2);
+}
+
+.v2-card--inset {
+  background: rgba(0, 0, 0, 0.3);
+  box-shadow: none;
+}
+
+/* ============================================================
+   MONEY — the hero element of this design system
+   ============================================================ */
+
+.v2-money {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--v2-lime);
+}
+
+.v2-money__value { font-weight: 800; }
+.v2-money__unit {
+  font-size: 0.42em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--v2-lime-dim);
+}
+
+.v2-money--hero .v2-money__value { font-size: 60px; }
+.v2-money--lg .v2-money__value { font-size: 34px; }
+.v2-money--md .v2-money__value { font-size: 22px; }
+.v2-money--sm .v2-money__value { font-size: 16px; }
+
+.v2-money--neutral { color: var(--v2-text-hi); }
+.v2-money--neutral .v2-money__unit { color: var(--v2-text-lo); }
+
+/* ============================================================
+   BADGE / PILL
+   ============================================================ */
+
+.v2-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: var(--v2-r-full);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.v2-badge__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.v2-badge--live { background: var(--v2-lime-soft); color: var(--v2-lime); }
+.v2-badge--info { background: var(--v2-blue-soft); color: var(--v2-blue); }
+.v2-badge--warn { background: var(--v2-amber-soft); color: var(--v2-amber); }
+.v2-badge--dead { background: var(--v2-coral-soft); color: var(--v2-coral); }
+.v2-badge--mute { background: var(--v2-surface-3); color: var(--v2-text-mid); }
+
+/* Pulsing dot for genuinely-live states */
+.v2-badge--live .v2-badge__dot { animation: v2-pulse 2s ease-in-out infinite; }
+
+@keyframes v2-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
+}
+
+/* ============================================================
+   META ROW — small label/value pairs
+   ============================================================ */
+
+.v2-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--v2-text-mid);
+  min-width: 0;
+}
+
+.v2-meta svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--v2-text-lo);
+}
+
+.v2-meta--truncate span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   SECTION LABEL
+   ============================================================ */
+
+.v2-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--v2-text-lo);
+  margin-bottom: 12px;
+}
+
+/* Paired with an icon in a row, the label is a flex item — drop its margin. */
+.v2-row > .v2-label { margin-bottom: 0; }
+
+/* ============================================================
+   PROGRESS
+   ============================================================ */
+
+.v2-progress {
+  height: 7px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: var(--v2-r-full);
+  overflow: hidden;
+}
+
+.v2-progress__fill {
+  height: 100%;
+  background: var(--v2-lime);
+  border-radius: var(--v2-r-full);
+  transition: width 0.55s var(--v2-ease);
+}
+
+/* ============================================================
+   INPUT
+   ============================================================ */
+
+.v2-input {
+  width: 100%;
+  padding: 15px 17px;
+  background: var(--v2-surface-2);
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-r-md);
+  color: var(--v2-text-hi);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.v2-input::placeholder { color: var(--v2-text-lo); }
+
+.v2-input:focus {
+  border-color: rgba(204, 255, 77, 0.45);
+  background: var(--v2-surface-3);
+}
+
+.v2-searchwrap { position: relative; }
+
+.v2-searchwrap svg {
+  position: absolute;
+  left: 17px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 17px;
+  height: 17px;
+  color: var(--v2-text-lo);
+  pointer-events: none;
+}
+
+.v2-searchwrap .v2-input { padding-left: 45px; }
+
+/* ============================================================
+   SEGMENTED FILTER
+   ============================================================ */
+
+.v2-segmented {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.v2-segmented::-webkit-scrollbar { display: none; }
+
+.v2-chip {
+  padding: 9px 17px;
+  background: var(--v2-surface-2);
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-r-full);
+  color: var(--v2-text-mid);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.v2-chip:hover { color: var(--v2-text-hi); }
+
+.v2-chip--on {
+  background: var(--v2-lime);
+  border-color: var(--v2-lime);
+  color: #0C0B0E;
+  font-weight: 700;
+}
+
+/* ============================================================
+   TAB BAR
+   ============================================================ */
+
+.v2-tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 420px;
+  z-index: 60;
+  padding: 0 var(--v2-gutter) calc(14px + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.v2-tabbar__inner {
+  pointer-events: auto;
+  display: flex;
+  gap: 4px;
+  padding: 7px;
+  background: rgba(20, 19, 24, 0.86);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-r-full);
+  box-shadow: var(--v2-shadow-3);
+}
+
+.v2-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 4px;
+  background: none;
+  border: none;
+  border-radius: var(--v2-r-full);
+  color: var(--v2-text-lo);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.2s, background 0.25s var(--v2-ease);
+}
+
+.v2-tab svg { width: 20px; height: 20px; }
+
+.v2-tab:hover { color: var(--v2-text-mid); }
+
+.v2-tab--on {
+  background: var(--v2-lime-soft);
+  color: var(--v2-lime);
+}
+
+/* ============================================================
+   SKELETON
+   ============================================================ */
+
+.v2-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--v2-surface-1) 25%,
+    var(--v2-surface-3) 50%,
+    var(--v2-surface-1) 75%
+  );
+  background-size: 200% 100%;
+  animation: v2-shimmer 1.4s infinite linear;
+  border-radius: var(--v2-r-lg);
+}
+
+@keyframes v2-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+
+.v2-empty {
+  text-align: center;
+  padding: 52px 24px;
+}
+
+.v2-empty__icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--v2-surface-2);
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-r-full);
+  color: var(--v2-text-lo);
+}
+
+.v2-empty__icon svg { width: 24px; height: 24px; }
+
+.v2-empty__title {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  margin: 0 0 6px;
+}
+
+.v2-empty__body {
+  font-size: 14px;
+  color: var(--v2-text-mid);
+  margin: 0;
+  line-height: 1.55;
+}
+
+/* ============================================================
+   STACK UTILITIES
+   ============================================================ */
+
+.v2-stack { display: flex; flex-direction: column; }
+.v2-stack--4 { gap: 4px; }
+.v2-stack--8 { gap: 8px; }
+.v2-stack--12 { gap: 12px; }
+.v2-stack--16 { gap: 16px; }
+.v2-stack--24 { gap: 24px; }
+.v2-stack--32 { gap: 32px; }
+
+.v2-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.v2-row--between { justify-content: space-between; }
+.v2-row--top { align-items: flex-start; }
+.v2-grow { flex: 1; min-width: 0; }
+
+/* ============================================================
+   DESIGN SWITCHER (v1 <-> v2 comparison affordance)
+   ============================================================ */
+
+.v2-switcher {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  right: 12px;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+  background: rgba(12, 11, 14, 0.78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+  font-family: 'Inter', sans-serif;
+}
+
+.v2-switcher__btn {
+  padding: 5px 13px;
+  background: none;
+  border: none;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.v2-switcher__btn:hover { color: #fff; }
+
+.v2-switcher__btn--on {
+  background: #CCFF4D;
+  color: #0C0B0E;
+}
+
+.v2-switcher:hover { opacity: 1; }
+
+/* Once the viewport is wider than the phone frame, pin the switcher to the
+   frame's top-right corner instead of the screen's. */
+@media (min-width: 480px) {
+  .v2-switcher {
+    right: auto;
+    left: 50%;
+    transform: translateX(122px);
+  }
+}

@@ -25,6 +25,11 @@ import VerifyTaskPage from './pages/vendor/VerifyTaskPage';
 import AnalyticsPage from './pages/vendor/AnalyticsPage';
 
 import SplashScreen from './pages/SplashScreen';
+
+// Design system v2 — lives alongside v1 under /v2 so the two can be compared.
+import V2Routes from './v2/V2Routes';
+import { DesignSwitcher } from './v2/DesignSwitcher';
+
 import './styles/globals.css';
 
 // Error boundary to catch and display runtime errors instead of white screen
@@ -92,9 +97,13 @@ function App() {
               <Route path="/vendor/verify-task" element={<VerifyTaskPage />} />
               <Route path="/vendor/analytics" element={<AnalyticsPage />} />
 
+              {/* Design system v2 (customer flow) */}
+              <Route path="/v2/*" element={<V2Routes />} />
+
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
+            <DesignSwitcher />
           </MobileContainer>
         </BrowserRouter>
       </Web3Provider>
