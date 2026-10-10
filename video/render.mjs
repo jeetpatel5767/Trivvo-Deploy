@@ -21,6 +21,8 @@ const SRC_AUDIO = path.resolve(HERE, flag('audio', path.join('out', 'soundtrack.
 const OUT = path.resolve(HERE, flag('out', pos[0] || path.join('out', 'trivvo-film.mp4')));
 const FPS = Number(flag('fps', pos[1] || 30));
 const SUB = Number(flag('sub', 1));
+// Fraction of each frame the shutter stays open; 0.5 is the film-standard 180-degree shutter.
+const SHUTTER = Number(flag('shutter', 1));
 const DUR = 60;
 
 // Encode from a private copy of the soundtrack so regenerating it mid-render can't break the mux.
@@ -46,7 +48,8 @@ ff.on('close', (code) => { ffDone = true; if (code) { console.error('ffmpeg exit
 
 const frames = Math.round(DUR * FPS * SUB), t0 = Date.now();
 for (let f = 0; f < frames; f++) {
-  await page.evaluate((t) => window.seek(t), f / (FPS * SUB));
+  const i = Math.floor(f / SUB), k = f % SUB;
+  await page.evaluate((t) => window.seek(t), (i + (k * SHUTTER) / SUB) / FPS);
   const png = await page.screenshot({ type: 'png' });
   if (ffDone) throw new Error('ffmpeg stopped early');
   if (!ff.stdin.write(png)) await new Promise((r) => ff.stdin.once('drain', r));
