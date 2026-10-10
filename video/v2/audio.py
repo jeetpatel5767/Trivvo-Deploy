@@ -48,7 +48,7 @@ def sfx2():
         S(tm, s_tick(1700 + k * 260), .045, (k - 1) * .35)
     S(2.0, s_click(), .32, -.35); S(2.25, s_click(), .32, 0)
     S(2.5, s_boom(), .8); S(2.5, s_marble(1700), .45, .3, .3); S(2.55, s_chime(), .42, 0, .45)
-    S(2.85, s_swish(.4), .07); S(3.85, s_swish(.3), .05); S(4.0, s_swish(.4), .07); S(4.05, s_drop(380), .45, 0, .3)
+    S(2.85, s_swish(.4), .07); S(3.8, s_swish(.3), .05); S(4.3, s_swish(.4), .07); S(4.3, s_drop(380), .45, 0, .3)
     S(4.55, s_whoosh(.85, 150, 3200), .38); S(5.3, s_thump(), .3)
     # 2 · the ad wall
     for i in range(5):
@@ -101,7 +101,7 @@ def sfx2():
     for tin in (26.25, 32.05):
         S(tin, s_whoosh(.5, 300, 1500, -.7, -.2), .13); S(tin, s_whoosh(.5, 300, 1500, .7, .2), .13); S(tin + .1, s_thump(), .25)
     for i in range(3):
-        S(26.6 + i * .12, s_click(), .16)
+        S(26.3 + i * .1, s_click(), .16)
     for i, tk in enumerate((27.5, 28.5, 29.5)):
         S(tk, s_click(), .5); S(tk + .02, s_marble((1600, 1900, 2400)[i]), .36, 0, .3); S(tk + .03, s_drop(900), .1, .3, .3)
     S(30.15, s_shimmer(86, 6, .45), .2, 0, .6)

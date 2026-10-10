@@ -197,8 +197,8 @@ S1.r=t=>{
   const ap=prog(t,1.0,.5),sq=prog(t,2.5,.5),w=Math.sin(Math.PI*sq)*(1-sq)*.08,base=.9+.1*E.ox(ap);
   op(s1Num.b,E.o3(ap));tf(s1Num.b,`scale(${f3(base*(1+w))},${f3(base*(1-w))})`);
   ringsAnim(s1Ring,t,2.5,.18,1.3,3.4,.5);burstAnim(s1Burst,t,2.52);
-  flip(s1Cap1,t,2.85,3.85);flip(s1Cap2,t,4.0,null);
-  const cp=prog(t,4.05,.8);op(s1Cup,cp>0?1:0);tf(s1Cup,`translateY(${f1((1-E.sp(cp))*60)}px) scale(${f3(E.sp(cp))}) rotate(${f1(-18*(1-E.o3(cp)))}deg)`);
+  flip(s1Cap1,t,2.85,3.8);flip(s1Cap2,t,4.3,null);
+  const cp=prog(t,4.3,.8);op(s1Cup,cp>0?1:0);tf(s1Cup,`translateY(${f1((1-E.sp(cp))*60)}px) scale(${f3(E.sp(cp))}) rotate(${f1(-18*(1-E.o3(cp)))}deg)`);
   tf(s1Pink,`scale(${f3(Math.pow(70,E.i3(prog(t,4.55,.8))))})`);       // dive into the 0
 };
 
@@ -426,8 +426,8 @@ S5.r=t=>{
   coins.forEach(c=>{const q=prog(t,24.6+c.dl,1.0),e=E.ox(q);op(c.e,q>0&&q<1?(q<.1?q*10:1-Math.pow((q-.1)/.9,2)):0);
     tf(c.e,`translate(${f1(c.tx*e)}px,${f1(c.ty*e+260*q*q)}px) scale(${f3(.4+1.5*e)}) rotate(${f1(c.sp*q)}deg)`)});
   // B
-  kin(bH1,t,26.4,30.15);kin(bH2,t,30.3,null);bCount.textContent=TICKS.filter(k=>t>=k).length+' of 3';tf(bFill,`scaleX(${f3(lvl/3)})`);
-  bRows.forEach((r,i)=>{const rq=E.ox(prog(t,26.55+i*.12,.7));op(r.row,rq);tf(r.row,`translateY(${f1((1-rq)*60)}px)`);
+  kin(bH1,t,26.15,30.15);kin(bH2,t,30.3,null);bCount.textContent=TICKS.filter(k=>t>=k).length+' of 3';tf(bFill,`scaleX(${f3(lvl/3)})`);
+  bRows.forEach((r,i)=>{const rq=E.ox(prog(t,26.25+i*.1,.7));op(r.row,rq);tf(r.row,`translateY(${f1((1-rq)*60)}px)`);
     const k=TICKS[i],q=prog(t,k,.6),on=t>=k;r.ci.style.background=on?C.ink:'rgba(16,35,28,.08)';tf(r.ci,`scale(${on?f3(.7+.3*E.sp(q)):1})`);
     const c=E.ox(prog(t,k+.05,.35));r.chk.setAttribute('stroke-dashoffset',(1-c).toFixed(4));r.chk.style.opacity=c>.002?1:0;
     tf(r.stk,`scaleX(${f3(E.ox(prog(t,k+.08,.45)))})`);op(r.stk,t>=k+.08?1:0);r.stk.style.width=px(r.tx.offsetWidth+8);
