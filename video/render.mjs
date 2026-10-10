@@ -4,6 +4,7 @@
 import { createRequire } from 'module';
 import { spawn } from 'child_process';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const require = createRequire(import.meta.url);
@@ -15,6 +16,10 @@ const OUT = process.argv[2] || path.join(HERE, 'out', 'trivvo-film.mp4');
 const FPS = Number(process.argv[3] || 30);
 const DUR = 60;
 
+// Encode from a private copy of the soundtrack so regenerating it mid-render can't break the mux.
+const AUDIO = path.join(HERE, 'out', `.render-audio-${process.pid}.wav`);
+fs.copyFileSync(path.join(HERE, 'out', 'soundtrack.wav'), AUDIO);
+
 const browser = await pw.chromium.launch({ args: ['--allow-file-access-from-files'] });
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 page.on('pageerror', (e) => console.log('pageerror:', e.message));
@@ -24,19 +29,23 @@ if (!fontOk) throw new Error('brand font did not load');
 
 const ff = spawn('ffmpeg', [
   '-y', '-v', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-i', '-',
-  '-i', path.join(HERE, 'out', 'soundtrack.wav'),
+  '-i', AUDIO,
   '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-tune', 'animation',
   '-pix_fmt', 'yuv420p', '-r', String(FPS), '-c:a', 'aac', '-b:a', '320k', '-shortest', '-movflags', '+faststart', OUT,
 ], { stdio: ['pipe', 'inherit', 'inherit'] });
+let ffDone = false;
+ff.on('close', (code) => { ffDone = true; if (code) { console.error('ffmpeg exited with', code); process.exit(1); } });
 
 const frames = Math.round(DUR * FPS), t0 = Date.now();
 for (let f = 0; f < frames; f++) {
   await page.evaluate((t) => window.seek(t), f / FPS);
   const png = await page.screenshot({ type: 'png' });
+  if (ffDone) throw new Error('ffmpeg stopped early');
   if (!ff.stdin.write(png)) await new Promise((r) => ff.stdin.once('drain', r));
   if (f % 300 === 0) console.log(`frame ${f}/${frames}  ${((Date.now() - t0) / 1000).toFixed(0)}s`);
 }
 ff.stdin.end();
-await new Promise((r) => ff.on('close', r));
+await new Promise((r) => (ffDone ? r() : ff.on('close', r)));
+fs.unlinkSync(AUDIO);
 await browser.close();
 console.log('wrote', OUT);
