@@ -447,8 +447,8 @@ def rms_db(x, a, b):
     return 20 * np.log10(np.sqrt(np.mean(seg ** 2)) + 1e-12)
 
 
-def main():
-    music(); sfx()
+def main(out_dir=OUT, sfx_fn=None):
+    music(); (sfx_fn or sfx)()
     # sidechain: pads, keys and bass breathe with the kick
     env = np.zeros(N)
     for t, v in KICKS:
@@ -479,8 +479,8 @@ def main():
     fade = np.ones(N); a, b = ns(59.0), ns(60.0); fade[a:b] = np.linspace(1, 0, b - a) ** 2; fade[b:] = 0
     m = m * fade * (0.89 / np.max(np.abs(m)))
 
-    os.makedirs(OUT, exist_ok=True)
-    raw = os.path.join(OUT, 'soundtrack-raw.wav')
+    os.makedirs(out_dir, exist_ok=True)
+    raw = os.path.join(out_dir, 'soundtrack-raw.wav')
     with wave.open(raw, 'wb') as w:
         w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
         w.writeframes((np.clip(m.T, -1, 1) * 32767).astype('<i2').tobytes())
@@ -492,7 +492,7 @@ def main():
     af = ('loudnorm=I=-14:TP=-1.0:LRA=11:linear=true:measured_I={input_i}:measured_TP={input_tp}:'
           'measured_LRA={input_lra}:measured_thresh={input_thresh}:offset={target_offset}').format(**meas)
     subprocess.run(['ffmpeg', '-y', '-v', 'error', '-i', raw, '-af', af, '-ar', str(SR), '-t', str(DUR),
-                    os.path.join(OUT, 'soundtrack.wav')], check=True)
+                    os.path.join(out_dir, 'soundtrack.wav')], check=True)
     print('input loudness', meas['input_i'], 'LUFS, peak', meas['input_tp'], 'dBTP')
 
 
