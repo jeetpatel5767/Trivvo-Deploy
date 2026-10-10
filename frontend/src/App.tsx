@@ -25,9 +25,9 @@ import VerifyTaskPage from './pages/vendor/VerifyTaskPage';
 import AnalyticsPage from './pages/vendor/AnalyticsPage';
 
 import SplashScreen from './pages/SplashScreen';
-import './styles/globals.css';
+import './styles/tokens.css';
+import './styles/ui.css';
 
-// Error boundary to catch and display runtime errors instead of white screen
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error: Error | null }
@@ -36,24 +36,25 @@ class ErrorBoundary extends React.Component<
     super(props);
     this.state = { hasError: false, error: null };
   }
+
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error };
   }
+
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: '40px', color: '#fff', background: '#1a1a2e', minHeight: '100vh', fontFamily: 'monospace' }}>
-          <h1 style={{ color: '#ff6b6b' }}>⚠️ App Error</h1>
-          <p style={{ marginTop: '16px', color: '#ccc' }}>{this.state.error?.message}</p>
-          <pre style={{ marginTop: '16px', fontSize: '0.75rem', color: '#888', whiteSpace: 'pre-wrap' }}>
-            {this.state.error?.stack}
-          </pre>
-          <button
-            onClick={() => window.location.reload()}
-            style={{ marginTop: '24px', padding: '12px 24px', background: '#7C3AED', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-          >
-            Reload App
-          </button>
+        <div className="frame">
+          <div className="screen">
+            <div className="stack" style={{ paddingTop: 48 }}>
+              <span className="overline t-subtle">Something broke</span>
+              <h1 className="title-l">That screen did not load.</h1>
+              <p className="body t-muted">{this.state.error?.message}</p>
+              <button className="btn btn--primary btn--lg btn--block" onClick={() => window.location.reload()}>
+                Reload
+              </button>
+            </div>
+          </div>
         </div>
       );
     }

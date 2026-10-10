@@ -1,244 +1,98 @@
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
-import LogoT from '../../assets/LogoT.png';
+import { Download, Printer } from 'lucide-react';
+import { getHunt } from '../../lib/api';
+import type { Hunt } from '../../lib/types';
+import { AppBar, Block, Button, IconStrip, Panel, Skeleton } from '../../ui';
+import { Icon } from '../../components/Icon';
 
+/** QR code — the code is the screen. */
 export default function QRCodePage() {
-    const { id } = useParams<{ id: string }>();
-    const navigate = useNavigate();
-    const qrData = `${id}:demo_secret_${id}`;
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [hunt, setHunt] = useState<Hunt | null>(null);
+  const [loading, setLoading] = useState(true);
 
-    const handleDownload = () => {
-        const svg = document.querySelector('.qr-download-target svg') as SVGSVGElement;
-        if (!svg) return;
-        const svgData = new XMLSerializer().serializeToString(svg);
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        img.onload = () => {
-            canvas.width = 400;
-            canvas.height = 400;
-            if (ctx) {
-                ctx.fillStyle = '#FFFFFF';
-                ctx.fillRect(0, 0, 400, 400);
-                ctx.drawImage(img, 50, 50, 300, 300);
-            }
-            const link = document.createElement('a');
-            link.download = `trivvo-hunt-${id}.png`;
-            link.href = canvas.toDataURL();
-            link.click();
-        };
-        img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+  useEffect(() => {
+    if (!id) return;
+    getHunt(id)
+      .then((res) => setHunt(res.data.hunt))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  const qrData = `${id}:${hunt?.qr_secret ?? `demo_secret_${id}`}`;
+
+  const download = () => {
+    const svg = document.querySelector('.qr-target svg') as SVGSVGElement;
+    if (!svg) return;
+    const svgData = new XMLSerializer().serializeToString(svg);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = 400;
+      canvas.height = 400;
+      if (ctx) {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, 400, 400);
+        ctx.drawImage(img, 50, 50, 300, 300);
+      }
+      const link = document.createElement('a');
+      link.download = `trivvo-hunt-${id}.png`;
+      link.href = canvas.toDataURL();
+      link.click();
     };
+    img.src = 'data:image/svg+xml;base64,' + btoa(svgData);
+  };
 
-    const cardStyle: React.CSSProperties = {
-        backgroundColor: '#FFFFFF',
-        border: 'var(--nb-border)',
-        boxShadow: 'var(--nb-shadow)',
-        borderRadius: 'var(--nb-radius-lg)',
-        padding: '24px',
-        marginBottom: '24px',
-        textAlign: 'center'
-    };
+  return (
+    <div className="screen">
+      <div className="hero hero--pink hero--tall" style={{ paddingTop: 0 }}>
+        <AppBar tone="pink" onBack={() => navigate('/vendor/dashboard')} />
+        <span className="overline">Display this in store</span>
+        <h1 style={{ fontSize: 36, fontWeight: 800, lineHeight: 1.02, letterSpacing: '-0.045em', marginTop: 8 }}>
+          Your code.
+        </h1>
+      </div>
 
-    return (
-        <div style={{
-            backgroundColor: 'var(--nb-bg)',
-            minHeight: '100vh',
-            fontFamily: "'Inter', sans-serif",
-            color: '#000000',
-            paddingBottom: '40px'
-        }}>
-            {/* Top Navigation Bar */}
-            <div style={{
-                backgroundColor: '#FFFFFF',
-                borderBottom: 'var(--nb-border)',
-                padding: '16px 24px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                position: 'sticky',
-                top: 0,
-                zIndex: 100
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{
-                        width: '40px',
-                        height: '40px',
-                        backgroundColor: 'var(--nb-yellow)',
-                        border: '2px solid #000',
-                        borderRadius: '8px',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        padding: '4px'
-                    }}>
-                        <img src={LogoT} alt="T" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                    </div>
-                    <span style={{ fontSize: '18px', fontWeight: 900, fontStyle: 'italic', textTransform: 'uppercase' }}>TR!VVO</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <span style={{ fontSize: '20px', cursor: 'pointer' }}>🔔</span>
-                    <div style={{
-                        width: '40px',
-                        height: '40px',
-                        backgroundColor: '#E5E7EB',
-                        border: '2px solid #000',
-                        borderRadius: '50%',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        fontSize: '20px'
-                    }}>👤</div>
-                </div>
+      <Panel style={{ marginTop: -16, position: 'relative' }}>
+        <Block>
+          {loading ? (
+            <Skeleton h={250} r={14} />
+          ) : (
+            <div className="qr-target" style={{ display: 'flex', justifyContent: 'center', padding: 6 }}>
+              <QRCodeSVG value={qrData} size={248} bgColor="#FFFFFF" fgColor="#10231C" level="M" />
             </div>
+          )}
+        </Block>
 
-            <div style={{ padding: '24px' }}>
-                {/* Header Section */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
-                    <button
-                        onClick={() => navigate('/vendor/dashboard')}
-                        style={{
-                            width: '48px',
-                            height: '48px',
-                            backgroundColor: '#FFFFFF',
-                            border: 'var(--nb-border)',
-                            boxShadow: '4px 4px 0px #000',
-                            borderRadius: '50%',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            fontSize: '20px',
-                            cursor: 'pointer'
-                        }}
-                    >←</button>
-                    <h1 style={{
-                        fontSize: '24px',
-                        fontWeight: 900,
-                        fontStyle: 'italic',
-                        textTransform: 'uppercase',
-                        margin: 0,
-                        lineHeight: '1'
-                    }}>HUNT QR CODE 📱</h1>
-                </div>
+        {hunt?.title && (
+          <Block tight>
+            <div className="title-s">{hunt.title}</div>
+            <p className="body-sm t-muted" style={{ marginTop: 6 }}>
+              Hunters scan this to check in and collect their arrival reward.
+            </p>
+          </Block>
+        )}
 
-                {/* QR Code Card */}
-                <div style={cardStyle}>
-                    <div className="qr-download-target" style={{
-                        display: 'inline-block',
-                        padding: '24px',
-                        backgroundColor: '#FFFFFF',
-                        border: '3px solid #000',
-                        boxShadow: '8px 8px 0px #000',
-                        borderRadius: '20px',
-                        marginBottom: '32px'
-                    }}>
-                        <QRCodeSVG
-                            value={qrData}
-                            size={200}
-                            bgColor="#FFFFFF"
-                            fgColor="#000000"
-                            level="H"
-                        />
-                    </div>
+        <Block tight style={{ padding: 0 }}>
+          <IconStrip
+            items={[
+              { icon: <Download strokeWidth={2.2} />, label: 'Download', onClick: download },
+              { icon: <Printer strokeWidth={2.2} />, label: 'Print', onClick: () => window.print() },
+              { icon: <Icon name="coins" set="objects" size={22} />, label: 'Fund', onClick: () => navigate(`/vendor/fund/${id}`) },
+            ]}
+          />
+        </Block>
+      </Panel>
 
-                    <h2 style={{ fontSize: '24px', fontWeight: 900, textTransform: 'uppercase', marginBottom: '8px' }}>Join the Hunt!</h2>
-                    <p style={{ fontSize: '14px', fontWeight: 700, color: '#6B7280', marginBottom: '24px' }}>
-                        Display this QR code at your location for hunters to scan.
-                    </p>
-
-                    <div style={{
-                        backgroundColor: '#F3F4F6',
-                        border: '2px solid #000',
-                        padding: '12px',
-                        borderRadius: '12px',
-                        fontSize: '10px',
-                        fontWeight: 800,
-                        wordBreak: 'break-all',
-                        marginBottom: '32px',
-                        color: '#4B5563'
-                    }}>
-                        QR DATA: {qrData}
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <button
-                            onClick={handleDownload}
-                            style={{
-                                width: '100%',
-                                backgroundColor: 'var(--nb-mint)',
-                                border: 'var(--nb-border)',
-                                boxShadow: 'var(--nb-shadow)',
-                                borderRadius: 'var(--nb-radius)',
-                                padding: '16px',
-                                fontSize: '18px',
-                                fontWeight: 900,
-                                textTransform: 'uppercase',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                justifyContent: 'center',
-                                alignItems: 'center',
-                                gap: '8px'
-                            }}
-                        >
-                            <span>📥</span> DOWNLOAD QR CODE
-                        </button>
-                        <button
-                            onClick={() => navigate(`/vendor/fund/${id}`)}
-                            style={{
-                                width: '100%',
-                                backgroundColor: 'var(--nb-yellow)',
-                                border: 'var(--nb-border)',
-                                boxShadow: 'var(--nb-shadow)',
-                                borderRadius: 'var(--nb-radius)',
-                                padding: '16px',
-                                fontSize: '18px',
-                                fontWeight: 900,
-                                textTransform: 'uppercase',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                justifyContent: 'center',
-                                alignItems: 'center',
-                                gap: '8px'
-                            }}
-                        >
-                            <span>💰</span> FUND THIS HUNT
-                        </button>
-                    </div>
-                </div>
-
-                {/* Instructions Board */}
-                <div style={{ ...cardStyle, textAlign: 'left', backgroundColor: '#FFFFFF' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: 900, textTransform: 'uppercase', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>📋</span> INSTRUCTIONS
-                    </h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {[
-                            'Download and print the QR code',
-                            'Display it prominently at your location',
-                            'Fund the hunt with USDC tokens',
-                            'Users scan → earn arrival reward → tasks',
-                            'Verify tasks and distribute main rewards'
-                        ].map((text, i) => (
-                            <div key={i} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                                <div style={{
-                                    width: '20px',
-                                    height: '20px',
-                                    backgroundColor: '#000',
-                                    color: '#FFF',
-                                    borderRadius: '50%',
-                                    display: 'flex',
-                                    justifyContent: 'center',
-                                    alignItems: 'center',
-                                    fontSize: '10px',
-                                    fontWeight: 900,
-                                    flexShrink: 0
-                                }}>{i + 1}</div>
-                                <p style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>{text}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
+      <div className="pad" style={{ marginTop: 32 }}>
+        <Button variant="ink" size="lg" block onClick={() => navigate(`/vendor/fund/${id}`)}>
+          Fund this hunt
+        </Button>
+      </div>
+    </div>
+  );
 }

@@ -41,3 +41,12 @@ database/*.db
 *.sln
 *.sw?
 .DS_Store
+
+# Local npm cache
+.npm_cache/
+
+# Claude scratch
+.claude/
+
+# Claude Code local artifacts (contains prompt history)
+.claude-mods/

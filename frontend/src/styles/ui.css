@@ -1,0 +1,705 @@
+/* Trivvo UI v2 — borderless, full-bleed, type-led.
+   Palette, type scale, spacing and motion stay per the design system.
+   Deliberate overrides of that doc:
+     §7.2 / §4.2.3  no 1.5px ink borders — separation is flat colour on flat colour
+     §7.3           surfaces carry the hierarchy instead of outlines
+   Edge definition comes from using colour full-bleed, never as a small inset block. */
+
+/* ============ SHELL ============ */
+
+.frame {
+  width: 100%;
+  max-width: var(--frame);
+  margin: 0 auto;
+  min-height: 100dvh;
+  background: var(--bone);
+  position: relative;
+  overflow-x: hidden;
+}
+
+.frame--dark { background: var(--ink); color: var(--bone); }
+
+/* Screens are edge to edge. Padding belongs to the blocks inside them. */
+.screen {
+  min-height: 100dvh;
+  padding-bottom: 40px;
+  animation: screen-enter var(--dur-base) var(--ease-out) both;
+}
+
+.screen--tabbar { padding-bottom: 116px; }
+
+.pad { padding-left: var(--gutter); padding-right: var(--gutter); }
+
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.stack-8 { display: flex; flex-direction: column; gap: 8px; }
+.stack-12 { display: flex; flex-direction: column; gap: 12px; }
+.stack-24 { display: flex; flex-direction: column; gap: 24px; }
+.row { display: flex; align-items: center; gap: 12px; }
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.row-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.grow { flex: 1; min-width: 0; }
+.center { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spacer { flex: 1; }
+
+/* ============ APP BAR — compact utility strip ============ */
+
+.appbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: max(14px, env(safe-area-inset-top)) var(--gutter) 14px;
+}
+
+.appbar__spacer { flex: 1; }
+
+.hero .appbar { padding-left: 0; padding-right: 0; }
+
+/* Small circular control. No outline: a tinted fill reads against any surface. */
+.icon-btn {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-full);
+  background: rgba(16, 35, 28, 0.07);
+  color: var(--ink);
+  transition: transform var(--dur-fast) var(--ease-spring), background var(--dur-fast) var(--ease-out);
+}
+
+.icon-btn svg { width: 20px; height: 20px; }
+.icon-btn:active { transform: scale(0.94); }
+.icon-btn--onPink { background: rgba(16, 35, 28, 0.12); }
+.icon-btn--onDark { background: rgba(244, 241, 234, 0.12); color: var(--bone); }
+
+/* ============ HERO — a full-bleed colour zone, the top third of a screen ============ */
+
+.hero {
+  padding: 8px var(--gutter) 36px;
+  border-radius: 0 0 var(--r-xl) var(--r-xl);
+}
+
+.hero--cream { background: var(--bone); }
+.hero--paper { background: var(--paper); }
+.hero--pink { background: var(--pink); }
+.hero--soft { background: var(--pink-soft); }
+.hero--ink { background: var(--ink); color: var(--bone); }
+.hero--flat { border-radius: 0; }
+.hero--tall { padding-top: 40px; padding-bottom: 48px; }
+
+/* ============ PANEL — a flat surface, subdivided by hairlines ============ */
+
+.panel {
+  background: var(--paper);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+}
+
+.panel--bone { background: var(--bone); }
+.panel--pink { background: var(--pink); }
+.panel--soft { background: var(--pink-soft); }
+.panel--ink { background: var(--ink); color: var(--bone); }
+.panel--flush { border-radius: 0; }
+.panel--inset { margin: 0 var(--gutter); width: auto; }
+/* An inset panel that is also tappable must subtract its own gutters, or the
+   width:100% below pushes it off-centre and over the right edge. */
+.panel--inset.panel--tap { width: calc(100% - (var(--gutter) * 2)); }
+.panel--tap { cursor: pointer; text-align: left; width: 100%; display: block; transition: transform var(--dur-fast) var(--ease-out); }
+.panel--tap:active { transform: scale(0.985); }
+
+/* A padded block inside a panel. Hairline below unless it is the last one. */
+.panel__block { padding: 20px; border-bottom: 1px solid var(--line); }
+.panel__block:last-child { border-bottom: none; }
+.panel__block--tight { padding: 16px 20px; }
+
+.panel--ink .panel__block,
+.frame--dark .panel__block { border-bottom-color: var(--dark-line); }
+
+.rule { height: 1px; background: var(--line); border: none; }
+.frame--dark .rule, .panel--ink .rule { background: var(--dark-line); }
+
+.frame--dark .panel { background: var(--ink-lifted); color: var(--bone); }
+
+/* ============ SECTION HEADING ============ */
+
+.sec {
+  padding: 0 var(--gutter);
+  margin-bottom: 12px;
+  color: var(--ink-subtle);
+}
+
+.frame--dark .sec { color: rgba(244, 241, 234, 0.62); }
+
+/* ============ BUTTON — pill, flat fill, no outline ============ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--r-full);
+  border: none;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition: transform var(--dur-fast) var(--ease-spring), filter var(--dur-fast) var(--ease-out);
+}
+
+.btn svg { width: 18px; height: 18px; flex: none; }
+.btn:hover:not(:disabled) { filter: brightness(0.96); }
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:disabled { opacity: 0.35; pointer-events: none; }
+
+.btn--lg { height: 56px; padding: 0 28px; font-size: 16px; }
+.btn--md { height: 52px; padding: 0 26px; font-size: 16px; }
+.btn--sm { height: 38px; padding: 0 18px; font-size: 14px; }
+
+.btn--primary { background: var(--pink); color: var(--ink); }
+.btn--ink { background: var(--ink); color: var(--bone); }
+.btn--paper { background: var(--paper); color: var(--ink); }
+.btn--secondary { background: rgba(16, 35, 28, 0.07); color: var(--ink); }
+.btn--ghost { background: transparent; color: var(--ink-muted); }
+.btn--danger { background: var(--error); color: var(--paper); }
+.btn--block { width: 100%; }
+
+.frame--dark .btn--secondary { background: rgba(244, 241, 234, 0.12); color: var(--bone); }
+.frame--dark .btn--ghost { color: rgba(244, 241, 234, 0.62); }
+
+/* Circular arrow button — the reference's primary affordance under a headline */
+.btn-round {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--r-full);
+  background: var(--pink);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.btn-round svg { width: 24px; height: 24px; }
+.btn-round:active { transform: scale(0.94); }
+.btn-round--ink { background: var(--ink); color: var(--bone); }
+
+.btn-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ============ PILL / BADGE — flat fill, no outline ============ */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--r-full);
+  background: rgba(16, 35, 28, 0.07);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pill--pink { background: var(--pink); }
+.pill--soft { background: var(--pink-soft); }
+.pill--amber { background: var(--amber-soft); }
+.pill--coral { background: var(--coral-soft); }
+.pill--ink { background: var(--ink); color: var(--bone); }
+.pill--onPink { background: rgba(16, 35, 28, 0.12); }
+.pill--onDark { background: rgba(244, 241, 234, 0.12); color: var(--bone); }
+
+/* Anything sitting on an ink surface inverts: a default pill or overline would
+   otherwise be near-black on near-black. */
+.panel--ink .pill, .hero--ink .pill {
+  background: rgba(244, 241, 234, 0.14);
+  color: var(--bone);
+}
+
+.panel--ink .overline { color: rgba(244, 241, 234, 0.6); }
+
+.payout .unit-pill { background: var(--pink); color: var(--ink); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: var(--r-full);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: rgba(16, 35, 28, 0.07);
+  color: var(--ink);
+}
+
+.badge--live { background: var(--pink); color: var(--ink); }
+.badge--upcoming { background: var(--amber-soft); }
+.badge--ended { background: var(--coral-soft); }
+.badge--neutral { background: rgba(16, 35, 28, 0.07); }
+
+.badge--live .badge-dot { background: var(--ink); }
+
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s var(--ease-out) infinite;
+}
+
+/* On a pink surface a pink badge would vanish — switch it to ink. */
+.hero--pink .badge, .panel--pink .badge { background: rgba(16, 35, 28, 0.12); }
+/* A pink badge would disappear into a pink surface, so it inverts to ink there. */
+.hero--pink .badge--live, .panel--pink .badge--live { background: var(--ink); color: var(--bone); }
+.hero--pink .badge--live .badge-dot, .panel--pink .badge--live .badge-dot { background: var(--pink); }
+
+/* ============ MONEY ============ */
+
+/* The small unit chip beside a big number — "per year" in the reference */
+.unit-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--r-full);
+  background: rgba(16, 35, 28, 0.1);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  vertical-align: middle;
+}
+
+.frame--dark .unit-pill,
+.panel--ink .unit-pill,
+.hero--ink .unit-pill {
+  background: rgba(244, 241, 234, 0.16);
+  color: var(--bone);
+}
+
+/* Badges on an ink hero need the inverse treatment too */
+.hero--ink .badge { background: rgba(244, 241, 234, 0.14); color: var(--bone); }
+.hero--ink .badge--live { background: var(--pink); color: var(--ink); }
+.hero--ink .badge--live .badge-dot { background: var(--ink); }
+.hero--ink .overline { color: rgba(244, 241, 234, 0.62); }
+
+/* ============ INPUT — filled, no outline ============ */
+
+.field { display: flex; flex-direction: column; gap: 8px; }
+
+.input,
+.textarea,
+select.input {
+  width: 100%;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--bone);
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 500;
+  transition: box-shadow var(--dur-fast) var(--ease-out);
+  appearance: none;
+}
+
+.input { height: 52px; padding: 0 16px; }
+.textarea { min-height: 110px; padding: 14px 16px; line-height: 1.5; resize: vertical; }
+
+.panel--bone .input, .panel--bone .textarea { background: var(--paper); }
+
+.input::placeholder, .textarea::placeholder { color: var(--ink-subtle); }
+.input:focus, .textarea:focus { outline: none; box-shadow: 0 0 0 3px var(--pink-soft); }
+.input--error, .textarea--error { box-shadow: 0 0 0 2px var(--error); }
+
+.frame--dark .input, .frame--dark .textarea {
+  background: rgba(244, 241, 234, 0.1);
+  color: var(--bone);
+}
+
+.frame--dark .input::placeholder { color: rgba(244, 241, 234, 0.55); }
+
+.input-affix {
+  display: flex;
+  align-items: center;
+  border-radius: var(--r-md);
+  background: var(--bone);
+  overflow: hidden;
+}
+
+.panel--bone .input-affix { background: var(--paper); }
+.input-affix .input { background: transparent; }
+.input-affix .input:focus { box-shadow: none; }
+.input-affix:focus-within { box-shadow: 0 0 0 3px var(--pink-soft); }
+
+.input-affix__unit {
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink-subtle);
+}
+
+/* ============ CHIP ROW ============ */
+
+.chip-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 0 var(--gutter);
+}
+
+.chip-row::-webkit-scrollbar { display: none; }
+
+.chip {
+  height: 38px;
+  padding: 0 18px;
+  border-radius: var(--r-full);
+  border: none;
+  background: rgba(16, 35, 28, 0.07);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex: none;
+  transition: transform var(--dur-fast) var(--ease-spring), background var(--dur-fast) var(--ease-out);
+}
+
+.chip:active { transform: scale(0.97); }
+.chip--on { background: var(--ink); color: var(--bone); }
+
+/* ============ SEGMENTED TOGGLE — dark pill on a light track ============ */
+
+.segment {
+  display: flex;
+  padding: 4px;
+  gap: 4px;
+  border-radius: var(--r-full);
+  background: rgba(16, 35, 28, 0.07);
+}
+
+.segment button {
+  flex: 1;
+  height: 40px;
+  border-radius: var(--r-full);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-muted);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.segment button[aria-selected="true"] { background: var(--ink); color: var(--bone); }
+
+/* ============ ICON ACTION STRIP — the reference's signature row ============ */
+
+.istrip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+}
+
+.istrip > button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 86px;
+  padding: 16px 8px;
+  border-right: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  text-align: center;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.istrip > button:last-child { border-right: none; }
+.istrip > button:active { background: rgba(16, 35, 28, 0.04); }
+.istrip svg { width: 20px; height: 20px; color: var(--ink); }
+
+/* ============ DATA TILES — MOT / TAX pattern: hairline grid, no boxes ============ */
+
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.tiles > div {
+  padding: 18px 20px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.tiles > div:nth-child(2n) { border-right: none; }
+.tiles > div:nth-last-child(-n + 2):nth-child(2n + 1) ~ div,
+.tiles > div:last-child { border-bottom: none; }
+
+.tiles .t-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-subtle);
+  display: block;
+  margin-bottom: 8px;
+}
+
+.tiles .t-value {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel--ink .tiles > div, .frame--dark .tiles > div {
+  border-color: var(--dark-line);
+}
+
+/* ============ PROGRESS ============ */
+
+.progress {
+  height: 8px;
+  border-radius: var(--r-full);
+  background: rgba(16, 35, 28, 0.1);
+  overflow: hidden;
+}
+
+.progress__fill {
+  height: 100%;
+  background: var(--pink);
+  border-radius: var(--r-full);
+  transition: width var(--dur-slow) var(--ease-out);
+}
+
+.hero--pink .progress, .panel--pink .progress { background: rgba(16, 35, 28, 0.16); }
+.hero--pink .progress__fill, .panel--pink .progress__fill { background: var(--ink); }
+
+/* ============ SKELETON ============ */
+
+.skeleton {
+  background: rgba(16, 35, 28, 0.08);
+  border-radius: var(--r-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* ============ EMPTY STATE ============ */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 52px 20px;
+}
+
+.empty__icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-full);
+  background: var(--pink-soft);
+  margin-bottom: 18px;
+}
+
+.empty__icon svg { width: 24px; height: 24px; color: var(--ink); }
+.empty h3 { margin-bottom: 6px; }
+.empty p { color: var(--ink-muted); margin-bottom: 22px; }
+.empty p:last-child { margin-bottom: 0; }
+
+/* ============ SHEET / TOAST ============ */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(16, 35, 28, 0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fade var(--dur-base) var(--ease-out) both;
+}
+
+.sheet {
+  width: 100%;
+  max-width: var(--frame);
+  background: var(--paper);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  padding: 24px;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  box-shadow: 0 -8px 40px rgba(16, 35, 28, 0.18);
+  animation: sheet-up var(--dur-base) var(--ease-out) both;
+}
+
+.sheet__grab {
+  width: 40px;
+  height: 4px;
+  border-radius: var(--r-full);
+  background: var(--line);
+  margin: 0 auto 20px;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + 20px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 70;
+  max-width: 380px;
+  width: calc(100% - 40px);
+  background: var(--ink);
+  color: var(--bone);
+  border-radius: var(--r-full);
+  padding: 14px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  animation: screen-enter var(--dur-base) var(--ease-out) both;
+}
+
+/* ============ TABLE ============ */
+
+.table { width: 100%; border-collapse: collapse; }
+
+.table th {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-subtle);
+  text-align: left;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.table td {
+  font-size: 14px;
+  font-weight: 500;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.table tr:last-child td { border-bottom: none; }
+.table .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* ============ TAB BAR — solid ink pill, reads on any surface without an outline ============ */
+
+.tabbar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  z-index: 50;
+  width: 100%;
+  max-width: var(--frame);
+  padding: 0 var(--gutter) calc(14px + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.tabbar__inner {
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  background: var(--ink);
+  border-radius: var(--r-full);
+  pointer-events: auto;
+}
+
+.tabbar a {
+  flex: 1;
+  height: 50px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: var(--r-full);
+  color: rgba(244, 241, 234, 0.6);
+  font-size: 10px;
+  font-weight: 700;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.tabbar a svg { width: 19px; height: 19px; }
+.tabbar a.is-active { background: var(--pink); color: var(--ink); }
+
+/* ============ MISC ============ */
+
+.link-inline {
+  font-size: 14px;
+  font-weight: 700;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.hero-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: reward-reveal var(--dur-slow) var(--ease-spring) 180ms both;
+}
+
+.check-mark {
+  width: 76px;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-full);
+  background: var(--pink);
+  color: var(--ink);
+}
+
+.stagger > * { animation: screen-enter var(--dur-base) var(--ease-out) both; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 45ms; }
+.stagger > *:nth-child(3) { animation-delay: 90ms; }
+.stagger > *:nth-child(4) { animation-delay: 135ms; }
+.stagger > *:nth-child(5) { animation-delay: 180ms; }
+.stagger > *:nth-child(n + 6) { animation-delay: 225ms; }
+
+/* ============ KEYFRAMES ============ */
+
+@keyframes screen-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes reward-reveal {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }

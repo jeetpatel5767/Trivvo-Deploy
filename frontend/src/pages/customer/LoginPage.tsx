@@ -1,223 +1,103 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAccount, useConnect } from 'wagmi';
-import { login } from '../../lib/api';
-import huntBuilding from '../../assets/hunt_building.png';
-import huntMap from '../../assets/hunt_map.png';
+import { ArrowRight } from 'lucide-react';
+import { login, OFFLINE } from '../../lib/api';
+import { Logo } from '../../components/Logo';
+import { Button, RoundButton } from '../../ui';
 
+/** The promise, as three beats rather than a paragraph — matches the headline's rhythm. */
+const BEATS = ['Show up.', 'Do the task.', 'Get paid.'];
+
+/** Login — the headline is the screen. Cream half, pink base, two labelled exits. */
 export default function LoginPage() {
-    const { isConnected, address } = useAccount();
-    const { connect, connectors, isPending } = useConnect();
-    const navigate = useNavigate();
+  const { isConnected, address } = useAccount();
+  const { connect, connectors, isPending } = useConnect();
+  const navigate = useNavigate();
 
-    useEffect(() => {
-        if (isConnected && address) {
-            login(address, 'user').catch(() => console.log('Backend not available — using demo mode'));
-            navigate('/hunts');
-        }
-    }, [isConnected, address, navigate]);
+  useEffect(() => {
+    if (isConnected && address) {
+      login(address, 'user').catch(() => {});
+      navigate('/hunts');
+    }
+  }, [isConnected, address, navigate]);
 
-    const handleConnect = () => {
-        const connector = connectors.find(c => c.id === 'metaMask')
-            || connectors.find(c => c.id === 'injected')
-            || connectors[0];
-        if (connector) connect({ connector });
-    };
+  const handleConnect = () => {
+    // placeholder: no wallet needed while OFFLINE — walk straight into the app.
+    if (OFFLINE) return navigate('/hunts');
+    const connector =
+      connectors.find((c) => c.id === 'metaMask') ||
+      connectors.find((c) => c.id === 'injected') ||
+      connectors[0];
+    if (connector) connect({ connector });
+  };
 
-    return (
-        <div style={{
-            backgroundColor: 'var(--nb-bg)',
-            color: 'var(--nb-text)',
-            minHeight: '100vh',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            padding: '24px',
-            position: 'relative',
-            overflowX: 'hidden',
-            fontFamily: "'Inter', sans-serif"
-        }}>
-            {/* Top Buttons Row */}
-            <div style={{
-                width: '100%',
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginBottom: '40px',
-                zIndex: 10
-            }}>
-                <button
-                    onClick={() => navigate('/')}
-                    style={{
-                        width: '56px',
-                        height: '56px',
-                        backgroundColor: 'var(--nb-yellow)',
-                        border: 'var(--nb-border)',
-                        boxShadow: 'var(--nb-shadow)',
-                        borderRadius: '50%',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        fontSize: '24px',
-                        cursor: 'pointer'
-                    }}
-                >
-                    ✕
-                </button>
-                <div style={{
-                    width: '56px',
-                    height: '56px',
-                    backgroundColor: 'var(--nb-mint)',
-                    border: 'var(--nb-border)',
-                    boxShadow: 'var(--nb-shadow)',
-                    borderRadius: '16px',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    fontSize: '24px'
-                }}>
-                    🧭
-                </div>
-            </div>
+  return (
+    <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
+      {/* Cream half — brand, headline and the arrow, centred as one block */}
+      <div
+        style={{
+          flex: 1,
+          background: 'var(--bone)',
+          padding: 'max(28px, env(safe-area-inset-top)) 20px 36px',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <Logo size={34} />
 
-            {/* Header Content */}
-            <div style={{ textAlign: 'center', marginBottom: '40px', position: 'relative' }}>
-                <div style={{ position: 'absolute', top: '-10px', right: '-40px', fontSize: '32px' }}>🗝️</div>
-                <h1 style={{
-                    fontSize: '48px',
-                    fontWeight: 900,
-                    fontStyle: 'italic',
-                    textTransform: 'uppercase',
-                    color: '#000000',
-                    lineHeight: '1',
-                    margin: 0,
-                    letterSpacing: '-1px'
-                }}>
-                    WELCOME<br />HUNTER
-                </h1>
-            </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <h1
+            style={{
+              fontSize: 'clamp(40px, 13.5vw, 52px)',
+              fontWeight: 800,
+              lineHeight: 0.98,
+              letterSpacing: '-0.05em',
+            }}
+          >
+            Get paid
+            <br />
+            to explore
+            <br />
+            your city.
+          </h1>
 
-            {/* Central Images Area */}
-            <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                gap: '16px',
-                marginBottom: '60px',
-                width: '100%',
-                position: 'relative'
-            }}>
-                <div style={{ position: 'absolute', left: '-5px', bottom: '10px', fontSize: '32px', zIndex: 1 }}>🌟</div>
-
-                {/* Image Card 1 */}
-                <div style={{
-                    width: '160px',
-                    height: '160px',
-                    backgroundColor: '#000',
-                    border: 'var(--nb-border)',
-                    boxShadow: 'var(--nb-shadow)',
-                    borderRadius: 'var(--nb-radius)',
-                    overflow: 'hidden'
-                }}>
-                    <img src={huntBuilding} alt="City Hunt" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                </div>
-
-                {/* Image Card 2 */}
-                <div style={{
-                    width: '160px',
-                    height: '160px',
-                    backgroundColor: '#000',
-                    border: 'var(--nb-border)',
-                    boxShadow: 'var(--nb-shadow)',
-                    borderRadius: 'var(--nb-radius)',
-                    overflow: 'hidden'
-                }}>
-                    <img src={huntMap} alt="Map Explorer" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                </div>
-            </div>
-
-            {/* Action Buttons Area */}
-            <div style={{
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px',
-                marginBottom: '40px'
-            }}>
-                {/* Connect MetaMask Button */}
-                <button
-                    onClick={handleConnect}
-                    disabled={isPending}
-                    style={{
-                        width: '100%',
-                        backgroundColor: 'var(--nb-yellow)',
-                        border: 'var(--nb-border)',
-                        boxShadow: 'var(--nb-shadow)',
-                        borderRadius: 'var(--nb-radius-lg)',
-                        padding: '20px',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        gap: '12px',
-                        fontSize: '20px',
-                        fontWeight: 900,
-                        textTransform: 'uppercase',
-                        cursor: 'pointer'
-                    }}
-                >
-                    <span style={{ fontSize: '24px' }}>📁</span>
-                    {isPending ? 'Connecting...' : 'CONNECT METAMASK'}
-                </button>
-
-                {/* Vendor Button */}
-                <button
-                    onClick={() => navigate('/vendor/dashboard')}
-                    style={{
-                        width: '100%',
-                        backgroundColor: 'var(--nb-pink)',
-                        border: '4px dashed #000',
-                        boxShadow: 'var(--nb-shadow)',
-                        borderRadius: 'var(--nb-radius-lg)',
-                        padding: '20px',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        gap: '12px',
-                        fontSize: '20px',
-                        fontWeight: 800,
-                        cursor: 'pointer'
-                    }}
-                >
-                    I am a Vendor 🏪
-                </button>
-            </div>
-
-            {/* Footer Text Links */}
-            <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-                <p style={{ color: '#6B7280', fontSize: '16px', margin: '0 0 8px 0' }}>New to the hunt?</p>
-                <button style={{
-                    background: 'none',
-                    border: 'none',
-                    borderBottom: '4px solid var(--nb-yellow)',
-                    fontSize: '18px',
-                    fontWeight: 800,
-                    padding: '0 0 2px 0',
-                    cursor: 'pointer'
-                }}>
-                    Create an account
-                </button>
-            </div>
-
-            {/* Footer Icons */}
-            <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                gap: '32px',
-                fontSize: '24px',
-                opacity: 0.3
-            }}>
-                <span>📍</span>
-                <span>📷</span>
-                <span>🏆</span>
-            </div>
+          <div style={{ marginTop: 32 }}>
+            <RoundButton onClick={handleConnect} aria-label="Get started" disabled={isPending}>
+              <ArrowRight strokeWidth={2.4} />
+            </RoundButton>
+          </div>
         </div>
-    );
+      </div>
+
+      {/* Pink base — three beats, one quiet fact, then the two ways in */}
+      <div
+        style={{
+          background: 'var(--pink)',
+          borderRadius: 'var(--r-xl) var(--r-xl) 0 0',
+          padding: '30px 20px calc(28px + env(safe-area-inset-bottom))',
+        }}
+      >
+        <div>
+          {BEATS.map((beat) => (
+            <div
+              key={beat}
+              style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.18, letterSpacing: '-0.035em' }}
+            >
+              {beat}
+            </div>
+          ))}
+        </div>
+
+        <div className="stack-12" style={{ marginTop: 28 }}>
+          <Button variant="ink" size="lg" block loading={isPending} onClick={handleConnect}>
+            Connect wallet
+          </Button>
+          <Button variant="paper" size="lg" block onClick={() => navigate('/vendor/dashboard')}>
+            I&apos;m a business
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }

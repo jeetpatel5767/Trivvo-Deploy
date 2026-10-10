@@ -1,35 +1,34 @@
-import { useAccount, useConnect, useDisconnect } from 'wagmi';
+import { useConnect, useDisconnect } from 'wagmi';
+import { useDemoAccount } from '../lib/demoAccount';
+import { Button, shortAddress } from '../ui';
 
-export function WalletButton() {
-    const { address, isConnected } = useAccount();
-    const { connect, connectors, isPending } = useConnect();
-    const { disconnect } = useDisconnect();
+export function WalletButton({ size = 'sm' }: { size?: 'lg' | 'md' | 'sm' }) {
+  const { address, isConnected } = useDemoAccount();
+  const { connect, connectors, isPending } = useConnect();
+  const { disconnect } = useDisconnect();
 
-    if (!isConnected) {
-        return (
-            <button
-                onClick={() => {
-                    const connector = connectors.find(c => c.id === 'metaMask')
-                        || connectors.find(c => c.id === 'injected')
-                        || connectors[0];
-                    if (connector) connect({ connector });
-                }}
-                disabled={isPending}
-                className="btn btn-primary btn-sm"
-            >
-                {isPending ? '⏳...' : '🔗 Connect'}
-            </button>
-        );
-    }
-
+  if (!isConnected) {
     return (
-        <div className="flex gap-2 items-center">
-            <span className="wallet-address" style={{ fontSize: '0.7rem', padding: '4px 8px' }}>
-                {address ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : ''}
-            </span>
-            <button onClick={() => disconnect()} className="btn btn-secondary btn-sm" style={{ padding: '4px 10px', fontSize: '0.7rem' }}>
-                ✕
-            </button>
-        </div>
+      <Button
+        variant="primary"
+        size={size}
+        loading={isPending}
+        onClick={() => {
+          const connector =
+            connectors.find((c) => c.id === 'metaMask') ||
+            connectors.find((c) => c.id === 'injected') ||
+            connectors[0];
+          if (connector) connect({ connector });
+        }}
+      >
+        Connect wallet
+      </Button>
     );
+  }
+
+  return (
+    <Button variant="secondary" size={size} className="mono" onClick={() => disconnect()}>
+      {shortAddress(address)}
+    </Button>
+  );
 }

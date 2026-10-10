@@ -1,470 +1,271 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
+import { useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
 import { parseUnits, formatUnits } from 'viem';
+import { Check } from 'lucide-react';
 import { HUNT_ESCROW_ABI, ERC20_ABI, CONTRACTS } from '../../lib/contracts';
-import { getHunt, fundHunt } from '../../lib/api';
-import LogoT from '../../assets/LogoT.png';
+import { getHunt, fundHunt, OFFLINE } from '../../lib/api';
+import { useDemoAccount } from '../../lib/demoAccount';
+import type { Hunt } from '../../lib/types';
+import { AppBar, Block, Button, Field, Money, Panel, SectionLabel, Tiles, UnitInput } from '../../ui';
+import { Icon } from '../../components/Icon';
 
-type FundingStep = 'input' | 'creating' | 'approving' | 'funding' | 'done';
+type Step = 'input' | 'creating' | 'approving' | 'funding' | 'done';
 
+const STEPS: { key: Step; label: string }[] = [
+  { key: 'creating', label: 'Create the hunt' },
+  { key: 'approving', label: 'Approve USDC' },
+  { key: 'funding', label: 'Move funds to escrow' },
+];
+
+const ORDER: Step[] = ['input', 'creating', 'approving', 'funding', 'done'];
+
+/** Fund hunt — two-step approve + fund. While OFFLINE the steps are simulated, no wallet needed. */
 export default function FundHuntPage() {
-    const { id } = useParams<{ id: string }>();
-    const navigate = useNavigate();
-    const { address } = useAccount();
-    const [amount, setAmount] = useState('50');
-    const [step, setStep] = useState<FundingStep>('input');
-    const [error, setError] = useState('');
-    const [hunt, setHunt] = useState<any>(null);
-    const [contractHuntId, setContractHuntId] = useState<bigint | null>(null);
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { address } = useDemoAccount();
+  const [amount, setAmount] = useState('50');
+  const [step, setStep] = useState<Step>('input');
+  const [error, setError] = useState('');
+  const [hunt, setHunt] = useState<Hunt | null>(null);
+  const [contractHuntId, setContractHuntId] = useState<bigint | null>(null);
 
-    // Fetch hunt details from backend
-    useEffect(() => {
-        if (id) getHunt(id).then(res => setHunt(res.data.hunt)).catch(() => { });
-    }, [id]);
+  useEffect(() => {
+    if (id) getHunt(id).then((res) => setHunt(res.data.hunt)).catch(() => {});
+  }, [id]);
 
-    // Read USDC balance
-    const { data: usdcBalance } = useReadContract({
+  const { data: usdcBalance } = useReadContract({
+    address: CONTRACTS.USDC_TOKEN as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+  });
+
+  const { data: nextHuntId } = useReadContract({
+    address: CONTRACTS.HUNT_ESCROW as `0x${string}`,
+    abi: HUNT_ESCROW_ABI,
+    functionName: 'nextHuntId',
+  });
+
+  const { writeContract: createOnChain, data: createTx } = useWriteContract();
+  const { isSuccess: createDone } = useWaitForTransactionReceipt({ hash: createTx });
+
+  const { writeContract: approveUSDC, data: approveTx } = useWriteContract();
+  const { isSuccess: approveDone } = useWaitForTransactionReceipt({ hash: approveTx });
+
+  const { writeContract: fundOnChain, data: fundTx } = useWriteContract();
+  const { isSuccess: fundDone } = useWaitForTransactionReceipt({ hash: fundTx });
+
+  useEffect(() => {
+    if (createDone && step === 'creating') {
+      setStep('approving');
+      approveUSDC({
         address: CONTRACTS.USDC_TOKEN as `0x${string}`,
         abi: ERC20_ABI,
-        functionName: 'balanceOf',
-        args: address ? [address] : undefined,
-    });
+        functionName: 'approve',
+        args: [CONTRACTS.HUNT_ESCROW as `0x${string}`, parseUnits(amount, 6)],
+      });
+    }
 
-    // Read nextHuntId from escrow to know what our ID will be
-    const { data: nextHuntId } = useReadContract({
+  }, [createDone, step]);
+
+  useEffect(() => {
+    if (approveDone && step === 'approving') {
+      setStep('funding');
+      fundOnChain({
         address: CONTRACTS.HUNT_ESCROW as `0x${string}`,
         abi: HUNT_ESCROW_ABI,
-        functionName: 'nextHuntId',
-    });
+        functionName: 'fundHunt',
+        args: [contractHuntId ?? BigInt(0), parseUnits(amount, 6)],
+      });
+    }
 
-    // Step 1: Create hunt on-chain
-    const { writeContract: createHuntOnChain, data: createTxHash } = useWriteContract();
-    const { isSuccess: createConfirmed } = useWaitForTransactionReceipt({ hash: createTxHash });
+  }, [approveDone, step]);
 
-    // Step 2: Approve USDC
-    const { writeContract: approveUSDC, data: approveTxHash } = useWriteContract();
-    const { isSuccess: approveConfirmed } = useWaitForTransactionReceipt({ hash: approveTxHash });
-
-    // Step 3: Fund hunt on-chain
-    const { writeContract: fundHuntOnChain, data: fundTxHash } = useWriteContract();
-    const { isSuccess: fundConfirmed } = useWaitForTransactionReceipt({ hash: fundTxHash });
-
-    // Watch for step transitions
-    useEffect(() => {
-        if (createConfirmed && step === 'creating') {
-            // Hunt created, now approve USDC
-            setStep('approving');
-            const amountInUnits = parseUnits(amount, 6);
-            approveUSDC({
-                address: CONTRACTS.USDC_TOKEN as `0x${string}`,
-                abi: ERC20_ABI,
-                functionName: 'approve',
-                args: [CONTRACTS.HUNT_ESCROW as `0x${string}`, amountInUnits],
-            });
-        }
-    }, [createConfirmed, step]);
-
-    useEffect(() => {
-        if (approveConfirmed && step === 'approving') {
-            // USDC approved, now fund the hunt
-            setStep('funding');
-            const amountInUnits = parseUnits(amount, 6);
-            fundHuntOnChain({
-                address: CONTRACTS.HUNT_ESCROW as `0x${string}`,
-                abi: HUNT_ESCROW_ABI,
-                functionName: 'fundHunt',
-                args: [contractHuntId ?? BigInt(0), amountInUnits],
-            });
-        }
-    }, [approveConfirmed, step]);
-
-    useEffect(() => {
-        if (fundConfirmed && step === 'funding') {
-            const finishFunding = async () => {
-                try {
-                    await fundHunt({
-                        huntId: id,
-                        contractHuntId: Number(contractHuntId),
-                        txHash: fundTxHash
-                    });
-                    setStep('done');
-                } catch (err) {
-                    console.error('Failed to register funding to DB', err);
-                    setError('Funded on blockchain, but failed to sync to database.');
-                }
-            };
-            finishFunding();
-        }
-    }, [fundConfirmed, step, id, contractHuntId, fundTxHash]);
-
-    const handleFund = async () => {
-        setError('');
-        if (!hunt) { setError('Hunt not found'); return; }
-        if (!address) { setError('Connect your wallet first'); return; }
-
-        const amountNum = parseFloat(amount);
-        if (amountNum <= 0) { setError('Enter a valid amount'); return; }
-
-        // Check USDC balance
-        const balanceFormatted = usdcBalance ? parseFloat(formatUnits(usdcBalance as bigint, 6)) : 0;
-        if (balanceFormatted < amountNum) {
-            setError(`Insufficient USDC balance. You have ${balanceFormatted.toFixed(2)} USDC`);
-            return;
-        }
-
-        // Step 1: Create hunt on the smart contract
-        setContractHuntId(nextHuntId as bigint || BigInt(0));
-        setStep('creating');
-        const arrivalRewardUnits = parseUnits(String(hunt.arrival_reward || '0.5'), 6);
-        const mainRewardUnits = parseUnits(String(hunt.main_reward || '5'), 6);
-        const now = Math.floor(Date.now() / 1000);
-        const startTime = hunt.start_time ? Math.floor(new Date(hunt.start_time).getTime() / 1000) : now - 60;
-        const endTime = hunt.end_time ? Math.max(Math.floor(new Date(hunt.end_time).getTime() / 1000), startTime + 3600) : startTime + 30 * 86400;
-
+  useEffect(() => {
+    if (fundDone && step === 'funding') {
+      (async () => {
         try {
-            createHuntOnChain({
-                address: CONTRACTS.HUNT_ESCROW as `0x${string}`,
-                abi: HUNT_ESCROW_ABI,
-                functionName: 'createHunt',
-                args: [
-                    CONTRACTS.USDC_TOKEN as `0x${string}`,
-                    arrivalRewardUnits,
-                    mainRewardUnits,
-                    BigInt(startTime),
-                    BigInt(endTime),
-                ],
-            });
-        } catch (err: any) {
-            setError(err?.message || 'Failed to create hunt on-chain');
-            setStep('input');
+          await fundHunt({ huntId: id, contractHuntId: Number(contractHuntId), txHash: fundTx });
+          setStep('done');
+        } catch {
+          setError('The funds moved, but we could not sync that to your dashboard.');
         }
-    };
+      })();
+    }
+  }, [fundDone, step, id, contractHuntId, fundTx]);
 
-    const arrivalReward = hunt?.arrival_reward || 0.5;
-    const mainReward = hunt?.main_reward || 5;
-    const perParticipant = Number(arrivalReward) + Number(mainReward);
-    const estimatedParticipants = Math.floor(parseFloat(amount || '0') / perParticipant);
-    const balanceDisplay = usdcBalance ? parseFloat(formatUnits(usdcBalance as bigint, 6)).toFixed(2) : '0.00';
+  /* placeholder: walks the three steps on timers so the flow is viewable without a wallet. */
+  const simulate = async () => {
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    setStep('creating');
+    await wait(900);
+    setStep('approving');
+    await wait(900);
+    setStep('funding');
+    await wait(900);
+    await fundHunt({ huntId: id, contractHuntId: 0, txHash: '0xdemo' }).catch(() => {});
+    setStep('done');
+  };
 
-    const cardStyle: React.CSSProperties = {
-        backgroundColor: '#FFFFFF',
-        border: 'var(--nb-border)',
-        boxShadow: 'var(--nb-shadow)',
-        borderRadius: 'var(--nb-radius-lg)',
-        padding: '24px',
-        marginBottom: '24px'
-    };
+  const handleFund = async () => {
+    setError('');
+    const amountNum = parseFloat(amount);
+    if (!(amountNum > 0)) return setError('Enter an amount above zero.');
 
-    const inputStyle: React.CSSProperties = {
-        width: '100%',
-        padding: '16px',
-        backgroundColor: '#FFFFFF',
-        border: '3px solid #000',
-        borderRadius: '12px',
-        fontSize: '24px',
-        fontWeight: 900,
-        outline: 'none',
-        textAlign: 'center',
-        boxShadow: '4px 4px 0px #000'
-    };
+    if (OFFLINE) return simulate();
 
+    if (!hunt) return setError('We could not load that hunt.');
+    if (!address) return setError('Connect your wallet first.');
+
+    const bal = usdcBalance ? parseFloat(formatUnits(usdcBalance as bigint, 6)) : 0;
+    if (bal < amountNum) return setError(`You have ${bal.toFixed(2)} USDC. Top up or lower the amount.`);
+
+    setContractHuntId((nextHuntId as bigint) || BigInt(0));
+    setStep('creating');
+
+    const now = Math.floor(Date.now() / 1000);
+    const start = hunt.start_time ? Math.floor(new Date(hunt.start_time).getTime() / 1000) : now - 60;
+    const end = hunt.end_time
+      ? Math.max(Math.floor(new Date(hunt.end_time).getTime() / 1000), start + 3600)
+      : start + 30 * 86400;
+
+    try {
+      createOnChain({
+        address: CONTRACTS.HUNT_ESCROW as `0x${string}`,
+        abi: HUNT_ESCROW_ABI,
+        functionName: 'createHunt',
+        args: [
+          CONTRACTS.USDC_TOKEN as `0x${string}`,
+          parseUnits(String(hunt.arrival_reward || '0.5'), 6),
+          parseUnits(String(hunt.main_reward || '5'), 6),
+          BigInt(start),
+          BigInt(end),
+        ],
+      });
+    } catch (err: any) {
+      setError(err?.message || 'That transaction did not go through.');
+      setStep('input');
+    }
+  };
+
+  const perHunter = Number(hunt?.arrival_reward ?? 0.5) + Number(hunt?.main_reward ?? 5);
+  const covers = perHunter > 0 ? Math.floor((parseFloat(amount) || 0) / perHunter) : 0;
+  const balance = usdcBalance ? parseFloat(formatUnits(usdcBalance as bigint, 6)).toFixed(2) : '0.00';
+  const busy = step !== 'input' && step !== 'done';
+
+  if (step === 'done') {
     return (
-        <div style={{
-            backgroundColor: 'var(--nb-bg)',
-            minHeight: '100vh',
-            fontFamily: "'Inter', sans-serif",
-            color: '#000000',
-            paddingBottom: '40px'
-        }}>
-            {/* Top Navigation Bar */}
-            <div style={{
-                backgroundColor: '#FFFFFF',
-                borderBottom: 'var(--nb-border)',
-                padding: '16px 24px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                position: 'sticky',
-                top: 0,
-                zIndex: 100
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{
-                        width: '40px',
-                        height: '40px',
-                        backgroundColor: 'var(--nb-yellow)',
-                        border: '2px solid #000',
-                        borderRadius: '8px',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        padding: '4px'
-                    }}>
-                        <img src={LogoT} alt="T" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                    </div>
-                    <span style={{ fontSize: '18px', fontWeight: 900, fontStyle: 'italic', textTransform: 'uppercase' }}>TR!VVO</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <span style={{ fontSize: '20px', cursor: 'pointer' }}>🔔</span>
-                    <div style={{
-                        width: '40px',
-                        height: '40px',
-                        backgroundColor: '#E5E7EB',
-                        border: '2px solid #000',
-                        borderRadius: '50%',
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        fontSize: '20px'
-                    }}>👤</div>
-                </div>
-            </div>
-
-            <div style={{ padding: '24px' }}>
-                {/* Header Section */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
-                    <button
-                        onClick={() => navigate('/vendor/dashboard')}
-                        style={{
-                            width: '48px',
-                            height: '48px',
-                            backgroundColor: '#FFFFFF',
-                            border: 'var(--nb-border)',
-                            boxShadow: '4px 4px 0px #000',
-                            borderRadius: '50%',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            fontSize: '20px',
-                            cursor: 'pointer'
-                        }}
-                    >←</button>
-                    <h1 style={{
-                        fontSize: '28px',
-                        fontWeight: 900,
-                        fontStyle: 'italic',
-                        textTransform: 'uppercase',
-                        margin: 0,
-                        lineHeight: '1'
-                    }}>FUND HUNT 💰</h1>
-                </div>
-
-                {step === 'done' ? (
-                    <div style={{ ...cardStyle, textAlign: 'center', padding: '40px 24px' }}>
-                        <div style={{
-                            width: '80px',
-                            height: '80px',
-                            backgroundColor: 'var(--nb-mint)',
-                            border: 'var(--nb-border)',
-                            boxShadow: 'var(--nb-shadow)',
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            margin: '0 auto 24px',
-                            fontSize: '40px'
-                        }}>✓</div>
-                        <h2 style={{ fontSize: '24px', fontWeight: 900, textTransform: 'uppercase', marginBottom: '16px' }}>HUNT FUNDED! 🎉</h2>
-                        <p style={{ fontWeight: 700, margin: '0 0 8px 0' }}>{amount} USDC deposited into escrow</p>
-                        <p style={{ fontSize: '12px', fontWeight: 800, color: '#6B7280', marginBottom: '16px' }}>
-                            TX: {fundTxHash?.slice(0, 10)}...{fundTxHash?.slice(-8)}
-                        </p>
-                        <div style={{
-                            backgroundColor: 'var(--nb-yellow)',
-                            border: '2px solid #000',
-                            padding: '8px 16px',
-                            borderRadius: '12px',
-                            display: 'inline-block',
-                            fontWeight: 900,
-                            marginBottom: '32px'
-                        }}>LIVE & ACTIVE ●</div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            <button
-                                onClick={() => navigate(`/vendor/hunt-manage/${id}`)}
-                                style={{
-                                    width: '100%',
-                                    backgroundColor: '#000',
-                                    color: '#FFF',
-                                    border: '2px solid #000',
-                                    borderRadius: '12px',
-                                    padding: '16px',
-                                    fontSize: '18px',
-                                    fontWeight: 900,
-                                    textTransform: 'uppercase',
-                                    cursor: 'pointer'
-                                }}
-                            >MANAGE HUNT</button>
-                            <button
-                                onClick={() => navigate('/vendor/dashboard')}
-                                style={{
-                                    width: '100%',
-                                    backgroundColor: '#FFFFFF',
-                                    border: '2px solid #000',
-                                    borderRadius: '12px',
-                                    padding: '16px',
-                                    fontSize: '18px',
-                                    fontWeight: 900,
-                                    textTransform: 'uppercase',
-                                    cursor: 'pointer'
-                                }}
-                            >BACK TO DASHBOARD</button>
-                        </div>
-                    </div>
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-
-                        {/* Balance Board */}
-                        <div style={{
-                            backgroundColor: 'var(--nb-mint)',
-                            border: 'var(--nb-border)',
-                            boxShadow: 'var(--nb-shadow)',
-                            borderRadius: 'var(--nb-radius)',
-                            padding: '16px',
-                            textAlign: 'center',
-                            marginBottom: '24px'
-                        }}>
-                            <p style={{ fontSize: '12px', fontWeight: 900, textTransform: 'uppercase', color: '#000', margin: '0 0 4px 0' }}>YOUR USDC BALANCE</p>
-                            <h2 style={{ fontSize: '24px', fontWeight: 900, margin: 0 }}>{balanceDisplay} USDC</h2>
-                        </div>
-
-                        {/* Amount Card */}
-                        <div style={cardStyle}>
-                            <h3 style={{ fontSize: '16px', fontWeight: 900, textTransform: 'uppercase', marginBottom: '16px' }}>💰 DEPOSIT USDC</h3>
-                            <p style={{ fontSize: '14px', fontWeight: 700, color: '#6B7280', marginBottom: '24px' }}>
-                                Tokens are locked in escrow and distributed to successful hunters.
-                            </p>
-
-                            <div style={{ marginBottom: '24px' }}>
-                                <label style={{ fontSize: '12px', fontWeight: 900, textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>AMOUNT (USDC)</label>
-                                <input
-                                    style={inputStyle}
-                                    type="number"
-                                    step="1"
-                                    value={amount}
-                                    onChange={(e) => setAmount(e.target.value)}
-                                    disabled={step !== 'input'}
-                                />
-                            </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '32px' }}>
-                                {['25', '50', '100', '250'].map((a) => (
-                                    <button
-                                        key={a}
-                                        onClick={() => setAmount(a)}
-                                        disabled={step !== 'input'}
-                                        style={{
-                                            backgroundColor: amount === a ? 'var(--nb-yellow)' : '#FFFFFF',
-                                            border: '2px solid #000',
-                                            borderRadius: '8px',
-                                            padding: '8px',
-                                            fontWeight: 900,
-                                            cursor: 'pointer',
-                                            boxShadow: amount === a ? '2px 2px 0px #000' : 'none'
-                                        }}
-                                    >{a}</button>
-                                ))}
-                            </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                <div style={{
-                                    backgroundColor: '#F3F4F6',
-                                    border: '2px solid #000',
-                                    borderRadius: '12px',
-                                    padding: '12px',
-                                    textAlign: 'center'
-                                }}>
-                                    <div style={{ fontSize: '20px', fontWeight: 900 }}>{estimatedParticipants}</div>
-                                    <div style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: '#6B7280' }}>EST. HUNTERS</div>
-                                </div>
-                                <div style={{
-                                    backgroundColor: '#F3F4F6',
-                                    border: '2px solid #000',
-                                    borderRadius: '12px',
-                                    padding: '12px',
-                                    textAlign: 'center'
-                                }}>
-                                    <div style={{ fontSize: '20px', fontWeight: 900 }}>{perParticipant}</div>
-                                    <div style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: '#6B7280' }}>USDC PER USER</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Transaction Tracker */}
-                        <div style={cardStyle}>
-                            <h3 style={{ fontSize: '16px', fontWeight: 900, textTransform: 'uppercase', marginBottom: '20px' }}>TRANSACTION STEPS</h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                {[
-                                    { label: 'Create hunt on smart contract', status: step === 'creating' ? 'loading' : createConfirmed ? 'done' : 'wait' },
-                                    { label: 'Approve USDC spend', status: step === 'approving' ? 'loading' : approveConfirmed ? 'done' : 'wait' },
-                                    { label: 'Deposit tokens into escrow', status: step === 'funding' ? 'loading' : fundConfirmed ? 'done' : 'wait' }
-                                ].map((s, i) => (
-                                    <div key={i} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                                        <div style={{
-                                            width: '24px',
-                                            height: '24px',
-                                            backgroundColor: s.status === 'done' ? 'var(--nb-mint)' : s.status === 'loading' ? 'var(--nb-yellow)' : '#FFF',
-                                            border: '2px solid #000',
-                                            borderRadius: '50%',
-                                            display: 'flex',
-                                            justifyContent: 'center',
-                                            alignItems: 'center',
-                                            fontSize: '12px',
-                                            fontWeight: 900
-                                        }}>
-                                            {s.status === 'done' ? '✓' : s.status === 'loading' ? '⏳' : i + 1}
-                                        </div>
-                                        <span style={{ fontSize: '14px', fontWeight: 700, color: s.status === 'wait' ? '#6B7280' : '#000' }}>{s.label}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {error && (
-                            <div style={{
-                                backgroundColor: '#FEE2E2',
-                                border: '2px solid #B91C1C',
-                                borderRadius: '12px',
-                                padding: '16px',
-                                marginBottom: '24px',
-                                color: '#B91C1C',
-                                fontWeight: 800,
-                                display: 'flex',
-                                gap: '8px'
-                            }}>
-                                <span>❌</span> {error}
-                            </div>
-                        )}
-
-                        <button
-                            onClick={handleFund}
-                            disabled={step !== 'input' || !amount || parseFloat(amount) <= 0}
-                            style={{
-                                width: '100%',
-                                backgroundColor: 'var(--nb-yellow)',
-                                border: 'var(--nb-border)',
-                                boxShadow: 'var(--nb-shadow)',
-                                borderRadius: 'var(--nb-radius-lg)',
-                                padding: '24px',
-                                fontSize: '20px',
-                                fontWeight: 900,
-                                textTransform: 'uppercase',
-                                cursor: step !== 'input' ? 'not-allowed' : 'pointer',
-                                opacity: step !== 'input' ? 0.8 : 1
-                            }}
-                        >
-                            {step === 'input' ? `DEPLOY ${amount} USDC` : 'PROCESSING...'}
-                        </button>
-
-                        {step !== 'input' && (
-                            <p style={{ textAlign: 'center', marginTop: '16px', fontSize: '12px', fontWeight: 800, color: '#6B7280' }}>
-                                ⚠️ CONFIRM TRANSACTIONS IN METAMASK
-                            </p>
-                        )}
-                    </div>
-                )}
-            </div>
+      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--pink)' }}>
+        <div className="center" style={{ flex: 1, justifyContent: 'center', padding: '40px 20px' }}>
+          <div className="check-mark">
+            <Check size={36} strokeWidth={3} />
+          </div>
+          <span className="overline" style={{ marginTop: 28 }}>
+            Funded
+          </span>
+          <div className="hero-amount" style={{ marginTop: 14 }}>
+            <Money value={amount} size="hero" chip />
+          </div>
+          <p className="body" style={{ marginTop: 20, fontWeight: 600 }}>
+            Your hunt is live. Rewards pay out as hunters check in.
+          </p>
         </div>
+
+        <div
+          style={{
+            background: 'var(--bone)',
+            borderRadius: 'var(--r-xl) var(--r-xl) 0 0',
+            padding: '28px 20px calc(28px + env(safe-area-inset-bottom))',
+          }}
+        >
+          <div className="stack-12">
+            <Button variant="ink" size="lg" block onClick={() => navigate(`/vendor/hunt-manage/${id}`)}>
+              Manage this hunt
+            </Button>
+            <Button variant="ghost" size="md" block onClick={() => navigate('/vendor/dashboard')}>
+              Back to overview
+            </Button>
+          </div>
+        </div>
+      </div>
     );
+  }
+
+  return (
+    <div className="screen">
+      <div className="hero hero--soft" style={{ paddingTop: 0 }}>
+        <AppBar onBack={() => navigate(-1)} tone="pink" />
+        <span className="overline t-subtle">{hunt?.title ?? 'Your hunt'}</span>
+        <h1 style={{ fontSize: 36, fontWeight: 800, lineHeight: 1.02, letterSpacing: '-0.045em', marginTop: 8 }}>
+          Fund the escrow.
+        </h1>
+      </div>
+
+      <Panel style={{ marginTop: 20 }}>
+        <Tiles
+          items={[
+            { label: 'Per hunter', value: perHunter },
+            { label: 'Your balance', value: balance },
+          ]}
+        />
+      </Panel>
+
+      <section style={{ marginTop: 28 }}>
+        <SectionLabel icon={<Icon name="coins" set="objects" size={16} />}>Amount to stake</SectionLabel>
+        <Panel>
+          <Block>
+            <Field
+              hint={covers > 0 ? `Covers about ${covers} ${covers === 1 ? 'hunter' : 'hunters'}.` : undefined}
+              error={error || undefined}
+            >
+              <UnitInput unit="USDC" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={busy} />
+            </Field>
+          </Block>
+        </Panel>
+      </section>
+
+      {busy && (
+        <section style={{ marginTop: 20 }}>
+          <Panel>
+            {STEPS.map((s) => {
+              const done = ORDER.indexOf(step) > ORDER.indexOf(s.key);
+              const current = step === s.key;
+              return (
+                <Block key={s.key} tight>
+                  <div className="row">
+                    <span
+                      style={{
+                        width: 24,
+                        height: 24,
+                        flex: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: 999,
+                        background: done ? 'var(--pink)' : 'rgba(16,35,28,0.08)',
+                      }}
+                    >
+                      {done && <Check size={13} strokeWidth={3} />}
+                      {current && <span className="btn-spinner" style={{ width: 12, height: 12 }} />}
+                    </span>
+                    <span className="body-sm" style={{ opacity: done || current ? 1 : 0.45 }}>
+                      {s.label}
+                    </span>
+                  </div>
+                </Block>
+              );
+            })}
+          </Panel>
+        </section>
+      )}
+
+      <div className="pad" style={{ marginTop: 32 }}>
+        <Button variant="ink" size="lg" block loading={busy} onClick={handleFund}>
+          Approve and fund
+        </Button>
+      </div>
+    </div>
+  );
 }
