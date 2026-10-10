@@ -1,0 +1,471 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Trivvo film</title>
+<!-- Trivvo product film, 1920x1080. A pure function of time: render.mjs calls seek(t) per frame.
+     Cue times here are mirrored in audio.py; change them together. -->
+<style>
+@font-face{font-family:J;font-weight:500;src:url(../video-kit/brand/fonts/PlusJakartaSans-Medium.ttf)}
+@font-face{font-family:J;font-weight:600;src:url(../video-kit/brand/fonts/PlusJakartaSans-SemiBold.ttf)}
+@font-face{font-family:J;font-weight:700;src:url(../video-kit/brand/fonts/PlusJakartaSans-Bold.ttf)}
+@font-face{font-family:J;font-weight:800;src:url(../video-kit/brand/fonts/PlusJakartaSans-ExtraBold.ttf)}
+html,body{margin:0;background:#10231C;overflow:hidden}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden;font-family:J,sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:'tnum' 1}
+.scene{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden}
+.t{position:absolute;white-space:nowrap}
+.w{display:inline-block;position:relative;z-index:1;overflow:hidden;vertical-align:top;padding:0 .04em .18em;margin:0 -.04em -.18em}
+.wi{display:inline-block}
+.pk{color:#FF85C7}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+const C={bone:'#F4F1EA',paper:'#FFFFFF',ink:'#10231C',inkL:'#1B2F28',pink:'#FF85C7',soft:'#FFE8F4',muted:'#4A5A54',subtle:'#5E6A64',amber:'#FFF1D6',coral:'#FFE0DC'};
+const ICON=n=>`../frontend/public/icons/objects/${n}.svg`;
+const PIN_D='M12 21.5s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z';
+
+/* ---------- maths ---------- */
+const clamp=(x,a=0,b=1)=>x<a?a:x>b?b:x, prog=(t,s,d)=>clamp((t-s)/d), lerp=(a,b,x)=>a+(b-a)*x;
+const E={
+  o3:x=>1-Math.pow(1-x,3), o5:x=>1-Math.pow(1-x,5), i3:x=>x*x*x, i2:x=>x*x,
+  ox:x=>x>=1?1:1-Math.pow(2,-10*x),
+  io3:x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2,
+  sp:x=>x<=0?0:x>=1?1:1-Math.exp(-6.5*x)*Math.cos(10.5*x),   // spring with ~12% overshoot
+};
+const hex=c=>{const n=parseInt(c.slice(1),16);return[n>>16,(n>>8)&255,n&255]};
+const mix=(a,b,x)=>{const A=hex(a),B=hex(b);return`rgb(${A.map((v,i)=>Math.round(lerp(v,B[i],x))).join(',')})`};
+const px=v=>v+'px';
+const tf=(e,s)=>{e.style.transform=s}, op=(e,v)=>{e.style.opacity=v};
+const wipe=x=>x>=1?'none':`inset(${((1-x)*100).toFixed(3)}% 0 0 0 round 96px 96px 0 0)`;
+const circ=x=>x>=1?'none':`circle(${(x*1150).toFixed(1)}px at 960px 540px)`;
+function rnd(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+/* ---------- dom ---------- */
+const stage=document.getElementById('stage');
+function el(p,st={},html=''){const e=document.createElement('div');e.style.position='absolute';Object.assign(e.style,st);if(html)e.innerHTML=html;p.appendChild(e);return e}
+const scenes=[],texts=[];
+function Scene(a,b,bg,clip){const d=el(stage,{left:0,top:0,width:'1920px',height:'1080px',background:bg,overflow:'hidden'});d.className='scene';const s={a,b,d,clip,r:()=>{}};scenes.push(s);return s}
+
+/* Kinetic text. [word] = pink, {word} = pink marker behind, ~word~ = pink strike. */
+function T(p,text,o){
+  const b=document.createElement('div');b.className='t';
+  const st={left:px(o.x||0),top:px(o.y||0),fontSize:px(o.size),color:o.color||C.ink,fontWeight:o.weight||800,
+    letterSpacing:(o.ls??-0.045)+'em',lineHeight:o.lh||1.04};
+  if(o.center){st.left='0';st.width='1920px';st.textAlign='center'}
+  if(o.cx!=null){st.left=px(o.cx-1000);st.width='2000px';st.textAlign='center'}
+  if(o.inline){st.position='relative';st.left='auto';st.top='auto'}
+  Object.assign(b.style,st);p.appendChild(b);
+  const Tx={box:b,inner:[],words:[],bars:[],o};
+  text.split('\n').forEach(line=>{
+    const ld=document.createElement('div');
+    const toks=o.chars?[...line]:line.split(' ');
+    toks.forEach((tok,i)=>{
+      if(i&&!o.chars)ld.appendChild(document.createTextNode(' '));
+      let cls='',flag=null,m;
+      if(m=tok.match(/^\[(.*)\]$/)){tok=m[1];cls='pk'}
+      if(m=tok.match(/^\{(.*)\}$/)){tok=m[1];flag='hl'}
+      if(m=tok.match(/^~(.*)~$/)){tok=m[1];flag='st'}
+      const w=document.createElement('span');w.className='w';
+      const wi=document.createElement('span');wi.className='wi '+cls;wi.textContent=tok;
+      w.appendChild(wi);ld.appendChild(w);Tx.inner.push(wi);Tx.words.push({w,flag});
+    });
+    b.appendChild(ld);
+  });
+  texts.push(Tx);return Tx;
+}
+function decorate(Tx){
+  const fs=Tx.o.size,groups=[];let cur=null;
+  Tx.words.forEach(({w,flag})=>{
+    if(!flag){cur=null;return}
+    if(cur&&cur.flag===flag&&cur.top===w.offsetTop)cur.r=w.offsetLeft+w.offsetWidth;
+    else groups.push(cur={flag,top:w.offsetTop,l:w.offsetLeft,r:w.offsetLeft+w.offsetWidth});
+  });
+  groups.forEach(g=>{
+    const bar=document.createElement('div');
+    Object.assign(bar.style,{position:'absolute',left:px(g.l-fs*.02),width:px(g.r-g.l+fs*.04),transformOrigin:'0 50%',transform:'scaleX(0)'});
+    if(g.flag==='hl'){Object.assign(bar.style,{top:px(g.top+fs*.12),height:px(fs*.9),background:C.pink,borderRadius:px(fs*.16),zIndex:0});Tx.box.insertBefore(bar,Tx.box.firstChild)}
+    else{Object.assign(bar.style,{top:px(g.top+fs*.5),height:px(Math.max(6,fs*.085)),background:C.pink,borderRadius:'99px',zIndex:2});Tx.box.appendChild(bar)}
+    Tx.bars.push(bar);
+  });
+}
+/* words rise out of their masks from a, leave upward from b */
+function kin(Tx,t,a,b,o={}){
+  const st=o.stagger??0.05,d=o.dur??0.8,os=o.os??0.022,od=o.od??0.42;
+  Tx.inner.forEach((s,i)=>{
+    const s0=o.starts?o.starts[i]:a+i*st;
+    let y=125*(1-E.ox(prog(t,s0,d)));
+    if(b!=null&&t>=b)y-=125*E.i3(prog(t,b+i*os,od));
+    s.style.transform=`translate3d(0,${y.toFixed(2)}%,0)`;
+  });
+  const end=b==null?1e9:b+od+Tx.inner.length*os+0.05;
+  Tx.box.style.visibility=(t>=a-0.001&&t<end)?'visible':'hidden';
+  if(b!=null)Tx.bars.forEach(br=>br.style.opacity=1-prog(t,b,0.25));
+}
+function bars(Tx,t,s,d=0.55){Tx.bars.forEach((br,i)=>tf(br,`scaleX(${E.ox(prog(t,s+i*0.08,d)).toFixed(4)})`))}
+
+/* Brand pieces */
+function Mark(p,size,outer,inner){
+  const d=el(p,{position:'relative',width:px(size),height:px(size),flex:'none'},
+    `<svg viewBox="0 0 100 100" width="${size}" height="${size}" style="overflow:visible"><g transform="translate(-3 2) rotate(12 50 50)" fill="none" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+     <path d="M16 34 L50 76 L84 34" stroke="${outer}" pathLength="1" stroke-dasharray="1 2" stroke-dashoffset="1"/>
+     <path d="M33 23 L50 44 L67 23" stroke="${inner}" pathLength="1" stroke-dasharray="1 2" stroke-dashoffset="1"/></g></svg>`);
+  const ps=d.querySelectorAll('path');return{d,o:ps[0],i:ps[1]};
+}
+function markAnim(M,t,a,b){
+  [[M.o,a],[M.i,b]].forEach(([p,s])=>{const q=E.ox(prog(t,s,0.55));p.setAttribute('stroke-dashoffset',(1-q).toFixed(4));p.style.opacity=q>0.002?1:0});
+  tf(M.d,`scale(${0.86+0.14*E.sp(prog(t,a,0.9))})`);
+}
+function Seal(p,size,cx,cy){
+  const g=el(p,{left:px(cx-size/2),top:px(cy-size/2),width:px(size),height:px(size)});
+  const rings=[0,1,2].map(()=>el(g,{left:0,top:0,width:px(size),height:px(size),boxSizing:'border-box',borderRadius:'50%',border:`${Math.max(3,Math.round(size*.022))}px solid ${C.ink}`,opacity:0}));
+  const dots=[...Array(16)].map((_,i)=>{
+    const a=i/16*Math.PI*2+(i%2?.2:0),dist=size*(.95+(i%3)*.28),ds=Math.round(size*(i%3===0?.085:i%3===1?.06:.045));
+    return{e:el(g,{left:px(size/2-ds/2),top:px(size/2-ds/2),width:px(ds),height:px(ds),borderRadius:'50%',background:i%2?C.bone:C.ink,opacity:0}),tx:Math.cos(a)*dist,ty:Math.sin(a)*dist,dl:(i%4)*.04};
+  });
+  const disc=el(g,{left:0,top:0,width:px(size),height:px(size),borderRadius:'50%',background:C.ink,display:'flex',alignItems:'center',justifyContent:'center',opacity:0},
+    `<svg viewBox="0 0 24 24" width="${size*.52}" height="${size*.52}"><path d="M6.2 12.6l3.7 3.7L17.8 8.4" fill="none" stroke="${C.pink}" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1 2" stroke-dashoffset="1"/></svg>`);
+  return{g,rings,dots,disc,chk:disc.querySelector('path')};
+}
+function sealAnim(S,t,t0){
+  const p=prog(t,t0,0.75);
+  op(S.disc,p>0?1:0);tf(S.disc,`scale(${E.sp(p).toFixed(4)}) rotate(${(-18*(1-E.o3(p))).toFixed(2)}deg)`);
+  const c=E.ox(prog(t,t0+.18,.42));S.chk.setAttribute('stroke-dashoffset',(1-c).toFixed(4));S.chk.style.opacity=c>.002?1:0;
+  S.rings.forEach((r,i)=>{const q=prog(t,t0+.08+i*.28,1.5);op(r,q>0&&q<1?.55*(1-q):0);tf(r,`scale(${.85+1.9*E.ox(q)})`)});
+  S.dots.forEach(d=>{const q=prog(t,t0+.1+d.dl,1.1),e=E.ox(q);op(d.e,q>0&&q<1?(q<.15?q/.15:1-(q-.15)/.85):0);tf(d.e,`translate(${(d.tx*e).toFixed(1)}px,${(d.ty*e).toFixed(1)}px) scale(${q>0?1-.4*q:0})`)});
+}
+function Badge(p,x,y,txt){return el(p,{left:px(x),top:px(y),height:'72px',padding:'0 30px',borderRadius:'36px',background:C.ink,color:C.bone,fontSize:'34px',fontWeight:800,letterSpacing:'-0.02em',lineHeight:'72px',transformOrigin:'0 50%'},txt)}
+function badgeAnim(b,t,a,o){const q=prog(t,a,.6),r=E.i3(prog(t,o,.3));op(b,(q>0?1:0)*(1-r));tf(b,`scale(${E.sp(q).toFixed(4)})`)}
+const img=(n,s)=>`<img src="${ICON(n)}" style="width:${s}px;height:${s}px;display:block">`;
+
+/* ---------- the city map (used by the problem scene and the turn) ---------- */
+const PATH='M -150 650 L 500 650 L 500 370 L 1240 370 L 1240 650 L 2100 650';
+const PINS=[[300,622],[650,342],[1000,342],[1100,622],[1400,622],[1760,622],[472,520],[528,440],[1212,520],[1268,800],[870,190],[842,820],
+            [160,342],[1610,342],[1582,880],[700,900],[1000,902],[300,902],[1840,180],[1400,170],[640,622],[160,120]];
+function mkMap(parent,id){
+  const V=[130,500,870,1240,1610],H=[90,370,650,930],xs=[-400,...V,2320],ys=[-400,...H,1480];
+  let s=`<svg width="1920" height="1080" style="position:absolute;left:0;top:0;overflow:visible"><defs><mask id="${id}m" maskUnits="userSpaceOnUse" x="-800" y="-800" width="3600" height="2800"><path id="${id}mp" d="${PATH}" stroke="#fff" stroke-width="44" fill="none" stroke-linecap="round" stroke-linejoin="round"/></mask></defs><g class="cam"><g transform="translate(960 540) rotate(-6) scale(1.12) translate(-960 -540)">`;
+  for(let i=0;i<xs.length-1;i++)for(let j=0;j<ys.length-1;j++)
+    s+=`<rect x="${xs[i]+40}" y="${ys[j]+40}" width="${xs[i+1]-xs[i]-80}" height="${ys[j+1]-ys[j]-80}" rx="30" fill="${(i+j)%2?'#ECE7DC':'#E7E1D4'}"/>`;
+  V.forEach(x=>s+=`<line x1="${x}" y1="-500" x2="${x}" y2="1600" stroke="#fff" stroke-width="40"/>`);
+  H.forEach(y=>s+=`<line x1="-500" y1="${y}" x2="2420" y2="${y}" stroke="#fff" stroke-width="40"/>`);
+  s+=`<path class="trail" d="${PATH}" fill="none" stroke="${C.ink}" stroke-width="10" stroke-linecap="round" stroke-dasharray="0.1 26" mask="url(#${id}m)" opacity=".8"/>`;
+  PINS.forEach(p=>s+=`<g transform="translate(${p[0]} ${p[1]})"><circle class="rp" r="10" fill="none" stroke="${C.pink}" stroke-width="5" opacity="0"/><g class="pb"><path d="${PIN_D}" transform="translate(-31.2 -56) scale(2.6)" fill="#C9C2B4"/><circle cx="0" cy="-29.5" r="7" fill="${C.bone}"/></g></g>`);
+  s+=`<g class="walker" opacity="0"><circle r="32" fill="rgba(16,35,28,.12)"/><circle r="16" fill="${C.ink}" stroke="#fff" stroke-width="6"/></g></g></g></svg>`;
+  const wrap=el(parent,{left:0,top:0,width:'1920px',height:'1080px'},s),svg=wrap.firstChild;
+  const mp=svg.querySelector('#'+id+'mp');
+  const pins=[...svg.querySelectorAll('.pb')].map((pb,i)=>({pb,body:pb.firstChild,rp:pb.previousSibling,x:PINS[i][0],y:PINS[i][1]}));
+  pins.map((p,i)=>i).sort((a,b)=>Math.hypot(pins[a].x-960,pins[a].y-540)-Math.hypot(pins[b].x-960,pins[b].y-540)).forEach((pi,r)=>pins[pi].rank=r);
+  return{svg,cam:svg.querySelector('.cam'),mp,L:0,pins,walker:svg.querySelector('.walker'),trail:svg.querySelector('.trail')};
+}
+
+/* =================== A · cold open: the money first (0–6.45) =================== */
+const A=Scene(0,6.45,C.ink);
+const aDrop=el(A.d,{left:'943px',top:'0',width:'34px',height:'34px',borderRadius:'50%',background:C.pink});
+const aRip=[0,1,2].map(()=>el(A.d,{left:'760px',top:'340px',width:'400px',height:'400px',boxSizing:'border-box',borderRadius:'50%',border:'3px solid '+C.pink,opacity:0}));
+const aPink=el(A.d,{left:0,top:0,width:'1920px',height:'1080px',background:C.pink});
+const aSeal=Seal(aPink,150,960,250);
+const aCup=el(aPink,{left:'875px',top:'165px',width:'170px',height:'170px'},img('coffee-cup',170));
+const aNum=el(aPink,{left:0,top:'335px',width:'1920px',textAlign:'center',fontSize:'290px',fontWeight:800,letterSpacing:'-0.05em',lineHeight:1,color:C.ink});
+const aT1=T(aPink,'Earned in 20 minutes.',{center:1,y:690,size:72});
+const aT2=T(aPink,'For having a coffee.',{center:1,y:690,size:72});
+A.r=t=>{
+  const pd=prog(t,.2,.38);aDrop.style.display=t>=.2&&t<.58?'block':'none';
+  tf(aDrop,`translateY(${lerp(-60,523,E.i2(pd)).toFixed(1)}px) scaleY(${1+.35*pd})`);
+  aRip.forEach((r,i)=>{const q=prog(t,.58+i*.14,1.1);op(r,q>0&&q<1?.9*(1-q):0);tf(r,`scale(${.05+1.6*E.ox(q)})`)});
+  const pc=E.o5(prog(t,.95,.75));aPink.style.clipPath=circ(pc);aPink.style.visibility=t>=.95?'visible':'hidden';
+  aNum.textContent='₹'+Math.round(150*E.o3(prog(t,1.35,1.3)));
+  const ap=prog(t,1.15,.45),pop=Math.sin(Math.PI*prog(t,2.65,.35))*.06;
+  op(aNum,E.o3(ap));tf(aNum,`translateY(${((1-E.ox(ap))*40).toFixed(1)}px) scale(${.94+.06*E.ox(ap)+pop})`);
+  sealAnim(aSeal,t,2.65);tf(aSeal.g,`scale(${1-E.i3(prog(t,4.3,.22))})`);
+  const cp=prog(t,4.48,.8);op(aCup,cp>0?1:0);tf(aCup,`scale(${E.sp(cp).toFixed(4)}) rotate(${(-16*(1-E.o3(cp))).toFixed(2)}deg)`);
+  kin(aT1,t,3.0,4.3);kin(aT2,t,4.5,null);
+};
+
+/* =================== B · problem: shops (5.8–9.8) =================== */
+const B=Scene(5.8,9.8,C.bone,t=>wipe(E.io3(prog(t,5.8,.6))));
+const bOver=T(B.d,'THE PROBLEM',{x:140,y:300,size:24,weight:700,ls:.16,color:C.subtle});
+const bT1=T(B.d,'Shops spend\nlakhs on ads.',{x:140,y:350,size:124});
+const bT2=T(B.d,'…people scroll\n{right} {past.}',{x:140,y:350,size:124});
+const feedWrap=el(B.d,{left:'1130px',top:'-60px',width:'620px',height:'1200px',overflow:'hidden'});
+const ADS=[['50% OFF',C.amber],['NEW IN',C.coral],['MEGA SALE',C.soft],['BUY 1 GET 1','#E9E4D9'],['FLAT ₹200 OFF',C.amber],['LIMITED',C.paper],
+           ['TODAY ONLY',C.coral],['SALE',C.soft],['FREE DELIVERY','#E9E4D9'],['70% OFF',C.amber],['JUST DROPPED',C.paper],['LAST CHANCE',C.coral]];
+const feed=ADS.map(([txt,bg])=>{
+  const c=el(feedWrap,{left:0,top:0,width:'620px',height:'240px',borderRadius:'36px',background:bg,overflow:'hidden'});
+  el(c,{left:'40px',top:'46px',fontSize:'50px',fontWeight:800,letterSpacing:'-0.04em',color:C.ink,whiteSpace:'nowrap'},txt);
+  el(c,{left:'40px',top:'128px',width:'300px',height:'18px',borderRadius:'9px',background:'rgba(16,35,28,.14)'});
+  el(c,{left:'40px',top:'164px',width:'200px',height:'18px',borderRadius:'9px',background:'rgba(16,35,28,.09)'});
+  el(c,{right:'36px',top:'64px',width:'120px',height:'120px',borderRadius:'30px',background:'rgba(16,35,28,.07)'});
+  el(c,{right:'30px',top:'22px',fontSize:'15px',fontWeight:800,letterSpacing:'.12em',color:'rgba(16,35,28,.45)'},'AD');
+  return c;
+});
+const PITCH=270,TOT=PITCH*ADS.length;
+function feedOff(t){let o=140*Math.max(0,t-6);if(t>7.6){const u=Math.min(1,t-7.6);o+=2460*u*u*u/3;if(t>8.6)o+=2460*(t-8.6)}return o}
+B.r=t=>{
+  const o=feedOff(t);feed.forEach((c,i)=>tf(c,`translateY(${(((i*PITCH-o)%TOT+TOT)%TOT-PITCH).toFixed(1)}px)`));
+  const sp=t<7.6?140:140+2460*Math.min(1,t-7.6)**2;
+  const fi=E.o3(prog(t,6.15,.7)),fo=E.i3(prog(t,9.2,.45));
+  feedWrap.style.filter=`blur(${Math.min(6,Math.max(0,(sp-300)/380)).toFixed(2)}px)`;
+  op(feedWrap,fi*(1-fo));tf(feedWrap,`translate(${(fo*160).toFixed(1)}px,${((1-fi)*120).toFixed(1)}px) rotate(-5deg)`);
+  kin(bOver,t,6.3,9.2);kin(bT1,t,6.4,7.7);kin(bT2,t,7.85,9.2);bars(bT2,t,8.35);
+};
+
+/* =================== C · problem: people (9.45–12.95) =================== */
+const Cc=Scene(9.45,12.95,C.bone);
+const cMap=mkMap(Cc.d,'mc');
+const cCard=el(Cc.d,{left:'110px',top:'96px',width:'1060px',height:'330px',borderRadius:'44px',background:C.paper,boxShadow:'0 30px 80px rgba(16,35,28,.10)'});
+const cT1=T(cCard,'You walk past\n100 places a day.',{x:60,y:60,size:96});
+const cT2=T(cCard,'You step\ninto {none.}',{x:60,y:60,size:96});
+Cc.r=t=>{
+  op(Cc.d,E.o3(prog(t,9.45,.45)));
+  cMap.cam.setAttribute('transform',`translate(960 540) scale(${1.08-.08*E.ox(prog(t,9.45,1.2))}) translate(-960 -540)`);
+  const wp=clamp((t-10)/2.5),pt=cMap.mp.getPointAtLength(cMap.L*wp);
+  cMap.mp.setAttribute('stroke-dasharray',`${(cMap.L*wp).toFixed(1)} ${cMap.L+60}`);
+  cMap.walker.setAttribute('transform',`translate(${pt.x.toFixed(1)} ${pt.y.toFixed(1)})`);
+  cMap.walker.setAttribute('opacity',clamp((t-9.9)/.2));
+  cMap.pins.forEach((p,i)=>{
+    const q=prog(t,9.6+i*.03,.6),d=Math.hypot(pt.x-p.x,pt.y-(p.y-20)),amp=t>10?clamp(1-d/110):0;
+    p.pb.setAttribute('transform',`translate(0 ${((1-E.sp(q))*-60).toFixed(1)}) rotate(${(Math.sin(t*26)*10*amp).toFixed(2)})`);
+    p.pb.setAttribute('opacity',q>0?Math.min(1,q*4):0);
+  });
+  const cq=E.ox(prog(t,9.8,.8));op(cCard,cq);tf(cCard,`translateY(${((1-cq)*-40).toFixed(1)}px)`);
+  kin(cT1,t,10.05,11.35);kin(cT2,t,11.5,null);bars(cT2,t,11.95);
+};
+
+/* =================== D · the gap (12.4–15.55) =================== */
+const D=Scene(12.4,15.55,C.ink,t=>wipe(E.io3(prog(t,12.4,.55))));
+const dT1=T(D.d,'Shops want\n[visitors.]',{x:140,y:300,size:170,color:C.bone});
+const dT2=T(D.d,'People want a\n[reason to go.]',{x:140,y:300,size:170,color:C.bone});
+D.r=t=>{kin(dT1,t,12.75,13.85);kin(dT2,t,14.0,15.3,{od:.25})};
+
+/* =================== E · the turn (15.5–20.3) =================== */
+const Es=Scene(15.5,20.3,C.bone);
+const eMap=mkMap(Es.d,'me');
+const eInk=el(Es.d,{left:0,top:0,width:'1920px',height:'1080px',background:C.ink});
+const eLock=el(eInk,{left:0,top:'300px',width:'1920px',display:'flex',justifyContent:'center',alignItems:'center',gap:'56px'});
+const eMark=Mark(eLock,220,C.bone,C.pink);
+const eWord=T(eLock,'Trivvo',{inline:1,chars:1,size:180,color:C.bone});
+const eTag=T(eInk,'turns your city into a [treasure] [hunt.]',{center:1,y:600,size:72,weight:700,ls:-.03,color:C.bone});
+Es.r=t=>{
+  const z=1.14-.14*E.o3(prog(t,15.5,.5))+.05*E.io3(prog(t,16,1.4));
+  eMap.cam.setAttribute('transform',`translate(960 540) scale(${z.toFixed(4)}) translate(-960 -540)`);
+  eMap.trail.setAttribute('opacity',0);
+  eMap.pins.forEach(p=>{
+    const f0=16+p.rank*.04,q=prog(t,f0,.42),sx=q<.5?1-2*q:2*q-1;
+    p.body.setAttribute('fill',q>=.5?C.pink:'#C9C2B4');
+    p.pb.setAttribute('transform',`translate(0 ${(-34*Math.sin(Math.PI*q)).toFixed(1)}) scale(${Math.max(.04,sx).toFixed(3)} 1)`);
+    const rq=prog(t,f0+.2,.7);p.rp.setAttribute('r',(10+80*E.ox(rq)).toFixed(1));p.rp.setAttribute('opacity',rq>0&&rq<1?.7*(1-rq):0);
+  });
+  eInk.style.clipPath=circ(E.o5(prog(t,17.15,.65)));eInk.style.visibility=t>=17.15?'visible':'hidden';
+  markAnim(eMark,t,17.45,17.65);kin(eWord,t,17.85,null,{stagger:.045});kin(eTag,t,18.45,null,{stagger:.04});
+};
+
+/* =================== F · 01 Show up (19.65–26.4) =================== */
+const F=Scene(19.65,26.4,C.bone,t=>wipe(E.io3(prog(t,19.65,.6))));
+const fB=Badge(F.d,140,250,'01');
+const fT=T(F.d,'Show up.',{x:140,y:360,size:170});
+const fCap=T(F.d,'Find a hunt nearby.\nWalk in. Scan the code.',{x:140,y:590,size:46,weight:600,ls:-.02,lh:1.3,color:C.muted});
+const ph=el(F.d,{left:'1125px',top:'70px',width:'470px',height:'940px',borderRadius:'82px',background:C.ink,boxShadow:'0 60px 120px rgba(16,35,28,.22)'});
+const scr=el(ph,{left:'15px',top:'15px',width:'440px',height:'910px',borderRadius:'68px',background:C.bone,overflow:'hidden'});
+{ // mini map inside the phone
+  const xs=[-300,70,250,430,800],ys=[-300,150,365,580,795,1200];let s=`<svg width="440" height="910" style="position:absolute;left:0;top:0;overflow:visible"><defs><mask id="pm" maskUnits="userSpaceOnUse" x="-400" y="-400" width="1400" height="1800"><path id="pmp" d="M150 580 L250 580 L250 365 L330 365" stroke="#fff" stroke-width="30" fill="none" stroke-linecap="round" stroke-linejoin="round"/></mask></defs><g transform="rotate(-8 220 455)">`;
+  for(let i=0;i<xs.length-1;i++)for(let j=0;j<ys.length-1;j++)s+=`<rect x="${xs[i]+26}" y="${ys[j]+26}" width="${xs[i+1]-xs[i]-52}" height="${ys[j+1]-ys[j]-52}" rx="20" fill="${(i+j)%2?'#ECE7DC':'#E7E1D4'}"/>`;
+  xs.slice(1,4).forEach(x=>s+=`<line x1="${x}" y1="-300" x2="${x}" y2="1200" stroke="#fff" stroke-width="28"/>`);
+  ys.slice(1,5).forEach(y=>s+=`<line x1="-300" y1="${y}" x2="800" y2="${y}" stroke="#fff" stroke-width="28"/>`);
+  s+=`<path d="M150 580 L250 580 L250 365 L330 365" fill="none" stroke="${C.ink}" stroke-width="8" stroke-linecap="round" stroke-dasharray="0.1 17" mask="url(#pm)"/>`;
+  s+=`<circle class="pulse" cx="330" cy="365" r="10" fill="none" stroke="${C.pink}" stroke-width="5" opacity="0"/><circle class="pulse" cx="330" cy="365" r="10" fill="none" stroke="${C.pink}" stroke-width="5" opacity="0"/>`;
+  s+=`<g class="mpin"><path d="${PIN_D}" transform="translate(-48 -86) scale(4)" fill="${C.pink}" stroke="${C.ink}" stroke-width=".45"/><circle cx="0" cy="-45.2" r="10" fill="${C.bone}" stroke="${C.ink}" stroke-width="1.8"/></g>`;
+  s+=`<circle cx="150" cy="580" r="26" fill="rgba(16,35,28,.12)"/><circle cx="150" cy="580" r="13" fill="${C.ink}" stroke="#fff" stroke-width="5"/></g></svg>`;
+  el(scr,{left:0,top:0,width:'440px',height:'910px'},s);
+}
+const mPin=scr.querySelector('.mpin'),mPulse=[...scr.querySelectorAll('.pulse')],mRoute=scr.querySelector('#pmp');
+const fCard=el(scr,{left:'16px',top:'640px',width:'408px',height:'252px',borderRadius:'44px',background:C.paper,boxShadow:'0 20px 50px rgba(16,35,28,.12)'});
+el(fCard,{left:'24px',top:'24px',width:'88px',height:'88px',borderRadius:'26px',background:C.soft,display:'flex',alignItems:'center',justifyContent:'center'},img('coffee-cup',60));
+el(fCard,{left:'130px',top:'30px',fontSize:'30px',fontWeight:800,letterSpacing:'-0.035em',color:C.ink,whiteSpace:'nowrap'},'Brew Lab Café');
+el(fCard,{left:'130px',top:'72px',fontSize:'22px',fontWeight:600,color:C.muted,whiteSpace:'nowrap'},'Coffee Quest · 400 m · ₹150');
+const fBtn=el(fCard,{left:'24px',top:'140px',width:'360px',height:'88px',borderRadius:'44px',background:C.pink,color:C.ink,fontSize:'28px',fontWeight:800,letterSpacing:'-0.02em',display:'flex',alignItems:'center',justifyContent:'center'},'I’m here');
+const scan=el(scr,{left:0,top:0,width:'440px',height:'910px',background:C.ink,opacity:0});
+const scanT=T(scan,'Point at the code.',{cx:220,y:130,size:38,color:C.bone});
+{ const r=rnd(7);let q=`<svg width="220" height="220" viewBox="0 0 220 220">`;
+  const finder=(x,y)=>`<rect x="${x+5}" y="${y+5}" width="50" height="50" rx="12" fill="none" stroke="${C.bone}" stroke-width="10"/><rect x="${x+20}" y="${y+20}" width="20" height="20" rx="5" fill="${C.bone}"/>`;
+  for(let i=0;i<11;i++)for(let j=0;j<11;j++){if((i<3&&j<3)||(i>7&&j<3)||(i<3&&j>7))continue;if(r()<.48)q+=`<rect x="${i*20+2}" y="${j*20+2}" width="16" height="16" rx="4" fill="${C.bone}" opacity=".9"/>`}
+  q+=finder(0,0)+finder(160,0)+finder(0,160)+'</svg>';
+  var scanQR=el(scan,{left:'110px',top:'345px',width:'220px',height:'220px'},q);
+}
+const scanBrk=el(scan,{left:'70px',top:'305px',width:'300px',height:'300px'},`<svg width="300" height="300" fill="none" stroke="${C.pink}" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"><path d="M10 70V10h60"/><path d="M230 10h60v60"/><path d="M290 230v60h-60"/><path d="M70 290H10v-60"/></svg>`);
+const scanLine=el(scan,{left:'86px',top:'0',width:'268px',height:'6px',borderRadius:'3px',background:C.pink,boxShadow:'0 0 26px 7px rgba(255,133,199,.55)'});
+const succ=el(scr,{left:0,top:0,width:'440px',height:'910px',background:C.pink});
+const sSeal=Seal(succ,140,220,350);
+const sNum=T(succ,'+₹15',{cx:220,y:470,size:120});
+const sLab=T(succ,'Checked in',{cx:220,y:612,size:34,weight:700,ls:-.02});
+el(scr,{left:'155px',top:'18px',width:'130px',height:'38px',borderRadius:'19px',background:C.ink,zIndex:5});
+F.r=t=>{
+  badgeAnim(fB,t,20.15,25.75);kin(fT,t,20.25,25.75);kin(fCap,t,20.9,25.75,{stagger:.035});
+  const pi=E.ox(prog(t,20.1,.9)),po=E.i3(prog(t,25.7,.5));
+  tf(ph,`translateY(${((1-pi)*1100+po*1100+Math.sin((t-20)*1.4)*7).toFixed(1)}px) rotate(${((1-pi)*8).toFixed(2)}deg)`);
+  const pq=prog(t,20.45,.7);mPin.setAttribute('transform',`translate(330 365) translate(0 ${((1-E.sp(pq))*-90).toFixed(1)})`);mPin.setAttribute('opacity',pq>0?1:0);
+  mPulse.forEach((c,k)=>{let best=0;for(let n=0;n<5;n++){const q=prog(t,20.8+n*1+k*.5,1);if(q>0&&q<1)best=q}c.setAttribute('r',(10+60*E.o3(best)).toFixed(1));c.setAttribute('opacity',best>0?.6*(1-best):0)});
+  const rl=600*E.io3(prog(t,21,.8));mRoute.setAttribute('stroke-dasharray',`${rl.toFixed(1)} 700`);
+  tf(fCard,`translateY(${((1-E.ox(prog(t,21.35,.7)))*300).toFixed(1)}px)`);
+  tf(fBtn,`scale(${(1-.06*Math.sin(Math.PI*prog(t,22.55,.22))).toFixed(4)})`);
+  op(scan,E.o3(prog(t,22.8,.25)));kin(scanT,t,22.95,null,{stagger:.04});
+  const bq=prog(t,22.95,.55);op(scanBrk,bq>0?1:0);tf(scanBrk,`scale(${(1.3-.3*E.sp(bq)).toFixed(4)})`);
+  op(scanQR,E.o3(prog(t,23.0,.4)));
+  const lq=E.io3(prog(t,23.2,.8));tf(scanLine,`translateY(${lerp(318,588,lq).toFixed(1)}px)`);op(scanLine,t>=23.15&&t<24.1?1:0);
+  succ.style.clipPath=`circle(${(E.o5(prog(t,24.2,.55))*620).toFixed(1)}px at 220px 455px)`;succ.style.visibility=t>=24.2?'visible':'hidden';
+  sealAnim(sSeal,t,24.35);kin(sNum,t,24.5,null);kin(sLab,t,24.62,null);
+};
+
+/* =================== G · 02 Do the task (25.75–31.9) =================== */
+const G=Scene(25.75,31.9,C.soft,t=>wipe(E.io3(prog(t,25.75,.6))));
+const gB=Badge(G.d,140,250,'02');
+const gT=T(G.d,'Do the\ntask.',{x:140,y:350,size:170});
+const gCap=T(G.d,'Three small things.\nTick them off as you go.',{x:140,y:735,size:46,weight:600,ls:-.02,lh:1.3,color:C.muted});
+const gCard=el(G.d,{left:'1040px',top:'170px',width:'760px',height:'740px',borderRadius:'48px',background:C.paper,boxShadow:'0 40px 100px rgba(16,35,28,.12)'});
+const gH1=T(gCard,'Your tasks.',{x:52,y:50,size:58});
+const gH2=T(gCard,'All done.',{x:52,y:50,size:58});
+const gCount=el(gCard,{right:'52px',top:'68px',fontSize:'28px',fontWeight:700,color:C.subtle});
+el(gCard,{left:'52px',top:'150px',width:'656px',height:'12px',borderRadius:'6px',background:'rgba(16,35,28,.1)'});
+const gFill=el(gCard,{left:'52px',top:'150px',width:'656px',height:'12px',borderRadius:'6px',background:C.ink,transformOrigin:'0 50%'});
+const gRows=['Find the hidden menu board','Try the chef’s special','Snap a photo with the barista'].map((s,i)=>{
+  const row=el(gCard,{left:'28px',top:px(206+i*168),width:'704px',height:'140px',borderRadius:'34px'});
+  const bg=el(row,{left:0,top:0,width:'704px',height:'140px',borderRadius:'34px',background:C.soft,opacity:0});
+  const circ=el(row,{left:'30px',top:'42px',width:'56px',height:'56px',borderRadius:'50%',background:'rgba(16,35,28,.08)',display:'flex',alignItems:'center',justifyContent:'center'},
+    `<svg viewBox="0 0 24 24" width="32" height="32"><path d="M5.8 12.6l3.9 3.9L18.2 8" fill="none" stroke="${C.pink}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1 2" stroke-dashoffset="1"/></svg>`);
+  const txt=el(row,{left:'112px',top:'46px',fontSize:'34px',fontWeight:600,letterSpacing:'-0.02em',color:C.ink,whiteSpace:'nowrap'},s);
+  const strike=el(row,{left:'108px',top:'68px',width:'10px',height:'4px',borderRadius:'2px',background:C.ink,transformOrigin:'0 50%'});
+  return{row,bg,circ,chk:circ.querySelector('path'),txt,strike};
+});
+const TICKS=[27.5,28.5,29.5];
+G.r=t=>{
+  let lvl=0;TICKS.forEach(k=>lvl+=E.o3(prog(t,k,.45)));G.d.style.background=mix(C.soft,C.pink,lvl/3);
+  badgeAnim(gB,t,26.2,31.3);kin(gT,t,26.3,31.3);kin(gCap,t,26.85,31.3,{stagger:.035});
+  const ci=E.ox(prog(t,26.3,.8)),co=E.i3(prog(t,31.3,.45));op(gCard,ci*(1-co));tf(gCard,`translateY(${((1-ci)*140-co*120).toFixed(1)}px)`);
+  kin(gH1,t,26.6,30.15);kin(gH2,t,30.3,null);
+  gCount.textContent=TICKS.filter(k=>t>=k).length+' of 3';
+  tf(gFill,`scaleX(${(lvl/3).toFixed(4)})`);
+  gRows.forEach((r,i)=>{
+    const rq=E.ox(prog(t,26.45+i*.12,.7));op(r.row,rq);tf(r.row,`translateX(${((1-rq)*80).toFixed(1)}px)`);
+    const k=TICKS[i],q=prog(t,k,.6),on=t>=k;
+    r.circ.style.background=on?C.ink:'rgba(16,35,28,.08)';tf(r.circ,`scale(${on?(.7+.3*E.sp(q)).toFixed(4):1})`);
+    const c=E.ox(prog(t,k+.05,.35));r.chk.setAttribute('stroke-dashoffset',(1-c).toFixed(4));r.chk.style.opacity=c>.002?1:0;
+    tf(r.strike,`scaleX(${E.ox(prog(t,k+.08,.45)).toFixed(4)})`);op(r.strike,t>=k+.08?1:0);
+    r.txt.style.color=mix(C.ink,C.subtle,E.o3(prog(t,k+.1,.3)));op(r.bg,E.o3(prog(t,k,.35)));
+  });
+};
+
+/* =================== H · 03 Get paid (31.8–38.05) =================== */
+const Hs=Scene(31.8,38.05,C.pink);
+const hB=Badge(Hs.d,140,250,'03');
+const hT=T(Hs.d,'Get paid.',{x:140,y:360,size:170});
+const hCap=T(Hs.d,'The shop checks.\nThe money is yours.',{x:140,y:590,size:46,weight:600,ls:-.02,lh:1.3,color:'rgba(16,35,28,.72)'});
+const hSeal=Seal(Hs.d,210,1340,330);
+const hNum=el(Hs.d,{left:'840px',top:'470px',width:'1000px',textAlign:'center',fontSize:'230px',fontWeight:800,letterSpacing:'-0.05em',lineHeight:1,color:C.ink});
+const hLine=T(Hs.d,'Paid. Instantly.',{cx:1340,y:735,size:60,weight:800,ls:-.035});
+const hBan=el(Hs.d,{left:'1040px',top:'46px',width:'740px',height:'124px',borderRadius:'62px',background:C.paper,boxShadow:'0 24px 60px rgba(16,35,28,.16)'});
+el(hBan,{left:'28px',top:'28px',width:'68px',height:'68px'},'<img src="../frontend/public/favicon.svg" style="width:68px;height:68px;display:block">');
+el(hBan,{left:'120px',top:'24px',fontSize:'32px',fontWeight:800,letterSpacing:'-0.035em',color:C.ink,whiteSpace:'nowrap'},'₹150 received');
+el(hBan,{left:'120px',top:'68px',fontSize:'24px',fontWeight:600,color:C.muted,whiteSpace:'nowrap'},'Brew Lab Café · just now');
+Hs.r=t=>{
+  badgeAnim(hB,t,32.15,37.35);kin(hT,t,32.25,37.35);kin(hCap,t,32.9,37.35,{stagger:.035});
+  sealAnim(hSeal,t,32.6);
+  hNum.textContent='+₹'+Math.round(150*E.o3(prog(t,32.9,1.0)));
+  const nq=prog(t,32.85,.4);op(hNum,E.o3(nq));tf(hNum,`scale(${(.92+.08*E.ox(nq)+.07*Math.sin(Math.PI*prog(t,33.9,.38))).toFixed(4)})`);
+  kin(hLine,t,34.35,null,{stagger:.07});
+  const bq=prog(t,35.1,.8),bo=E.i3(prog(t,36.9,.4));op(hBan,bq>0?1:0);
+  tf(hBan,`translateY(${(lerp(-220,0,E.sp(bq))-bo*260).toFixed(1)}px)`);
+};
+
+/* =================== I · businesses (37.4–48.2) =================== */
+const I=Scene(37.4,48.2,C.ink,t=>wipe(E.io3(prog(t,37.4,.6))));
+const iBig=T(I.d,'Own a [shop?]',{center:1,y:430,size:200,color:C.bone});
+const iOver=T(I.d,'FOR BUSINESSES',{x:140,y:118,size:24,weight:700,ls:.16,color:C.pink});
+const iHead=T(I.d,'Bring people through your door.',{x:140,y:160,size:70,color:C.bone});
+const CARDS=[['Drop a pin.','Choose your spot and what people do there.'],['Set the reward.','Pay for arrivals and for finished tasks.'],['Verify in one tap.','See it done. Release the reward.']];
+const iCards=CARDS.map(([h,s],i)=>{
+  const d=el(I.d,{left:px(140+i*560),top:'300px',width:'520px',height:'600px',borderRadius:'44px',background:C.inkL});
+  const vis=el(d,{left:'24px',top:'24px',width:'472px',height:'300px',borderRadius:'30px',background:'rgba(244,241,234,.05)',overflow:'hidden'});
+  el(d,{left:'40px',top:'356px',fontSize:'50px',fontWeight:800,letterSpacing:'-0.04em',color:C.bone,whiteSpace:'nowrap'},h);
+  el(d,{left:'40px',top:'428px',width:'440px',fontSize:'28px',fontWeight:500,lineHeight:1.38,color:'rgba(244,241,234,.62)'},s);
+  return{d,vis};
+});
+el(iCards[0].vis,{left:0,top:0,width:'472px',height:'300px'},`<svg width="472" height="300"><g stroke="rgba(244,241,234,.1)" stroke-width="18" transform="rotate(-8 236 150)"><line x1="-50" y1="90" x2="530" y2="90"/><line x1="-50" y1="230" x2="530" y2="230"/><line x1="120" y1="-50" x2="120" y2="350"/><line x1="340" y1="-50" x2="340" y2="350"/></g><circle class="rr" cx="236" cy="200" r="10" fill="none" stroke="${C.pink}" stroke-width="4" opacity="0"/><g class="bp"><path d="${PIN_D}" transform="translate(-38.4 -68.8) scale(3.2)" fill="${C.pink}"/><circle cx="0" cy="-36.2" r="8" fill="${C.ink}"/></g></svg>`);
+const bPin=iCards[0].vis.querySelector('.bp'),bRip=iCards[0].vis.querySelector('.rr');
+const pill=(p,y,txt,bg)=>el(p,{left:'236px',top:px(y),height:'76px',lineHeight:'76px',padding:'0 34px',borderRadius:'38px',background:bg,color:C.ink,fontSize:'30px',fontWeight:800,letterSpacing:'-0.03em',whiteSpace:'nowrap',opacity:0},txt);
+const iP1=pill(iCards[1].vis,64,'₹15 · on arrival',C.bone),iP2=pill(iCards[1].vis,160,'₹150 · on completion',C.pink);
+const iRip=el(iCards[2].vis,{left:'136px',top:'50px',width:'200px',height:'200px',borderRadius:'50%',background:C.pink,opacity:0});
+const iBtn=el(iCards[2].vis,{left:'86px',top:'102px',width:'300px',height:'96px',borderRadius:'48px',background:C.pink,color:C.ink,fontSize:'34px',fontWeight:800,letterSpacing:'-0.03em',display:'flex',alignItems:'center',justifyContent:'center'},'Verify');
+const iBtn2=el(iCards[2].vis,{left:'86px',top:'102px',width:'300px',height:'96px',borderRadius:'48px',background:C.bone,color:C.ink,fontSize:'34px',fontWeight:800,letterSpacing:'-0.03em',display:'flex',alignItems:'center',justifyContent:'center',gap:'12px',opacity:0},
+  `<svg viewBox="0 0 24 24" width="34" height="34"><path d="M5.8 12.6l3.9 3.9L18.2 8" fill="none" stroke="${C.ink}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>Verified`);
+const iStatsOver=T(I.d,'ONE WEEK AT BREW LAB CAFÉ',{center:1,y:250,size:26,weight:700,ls:.16,color:'rgba(244,241,234,.55)'});
+const iStats=[[412,'VISITS',400],[86,'CHECK-INS',960],[24,'NEW CUSTOMERS',1520]].map(([v,l,cx])=>({v,
+  num:el(I.d,{left:px(cx-400),top:'340px',width:'800px',textAlign:'center',fontSize:'200px',fontWeight:800,letterSpacing:'-0.05em',lineHeight:1,color:C.bone}),
+  lab:T(I.d,l,{cx,y:584,size:28,weight:700,ls:.16,color:C.pink})}));
+const iL1=T(I.d,'Ads charge you for ~views.~',{x:140,y:330,size:100,color:C.bone});
+const iL2=T(I.d,'Trivvo charges you for [visitors.]',{x:140,y:460,size:100,color:C.bone});
+const iL3=T(I.d,'Unused budget? It comes back to you.',{x:140,y:680,size:44,weight:600,ls:-.02,color:'rgba(244,241,234,.66)'});
+I.r=t=>{
+  kin(iBig,t,38.15,39.55,{stagger:.08});kin(iOver,t,39.75,43.15);kin(iHead,t,39.8,43.15,{stagger:.035});
+  iCards.forEach((c,i)=>{const q=E.ox(prog(t,39.95+i*.25,.8)),o=E.i3(prog(t,43.15+i*.06,.4));op(c.d,q*(1-o));tf(c.d,`translateY(${((1-q)*160-o*80).toFixed(1)}px)`)});
+  const pq=prog(t,40.9,.7);bPin.setAttribute('transform',`translate(236 200) translate(0 ${((1-E.sp(pq))*-130).toFixed(1)})`);bPin.setAttribute('opacity',pq>0?1:0);
+  const rq=prog(t,41.0,.8);bRip.setAttribute('r',(10+90*E.ox(rq)).toFixed(1));bRip.setAttribute('opacity',rq>0&&rq<1?.7*(1-rq):0);
+  [[iP1,41.4],[iP2,41.65]].forEach(([p,s])=>{const q=prog(t,s,.6);op(p,q>0?1:0);tf(p,`translateX(-50%) scale(${E.sp(q).toFixed(4)})`)});
+  const press=Math.sin(Math.PI*prog(t,42.3,.2));tf(iBtn,`scale(${(1-.07*press).toFixed(4)})`);
+  const vq=prog(t,42.45,.5);op(iBtn2,E.o3(vq));tf(iBtn2,`scale(${(vq>0?.9+.1*E.sp(vq):1).toFixed(4)})`);
+  const rp=prog(t,42.4,.8);op(iRip,rp>0&&rp<1?.35*(1-rp):0);tf(iRip,`scale(${(.4+1.6*E.ox(rp)).toFixed(3)})`);
+  kin(iStatsOver,t,43.4,44.85);
+  iStats.forEach((s,i)=>{const q=E.ox(prog(t,43.45+i*.1,.7)),o=E.i3(prog(t,44.85,.35));op(s.num,q*(1-o));tf(s.num,`translateY(${((1-q)*60-o*40).toFixed(1)}px)`);
+    s.num.textContent=Math.round(s.v*E.o3(prog(t,43.5,1.1)));kin(s.lab,t,43.6+i*.1,44.85)});
+  kin(iL1,t,45.0,null);bars(iL1,t,45.7,.4);kin(iL2,t,45.95,null);kin(iL3,t,46.8,null,{stagger:.03});
+};
+
+/* =================== J · every place (47.5–54.1) =================== */
+const J=Scene(47.5,54.1,C.bone,t=>circ(E.o5(prog(t,47.5,.65))));
+const jIcons=['coffee-cup','sneaker','pizza','museum','ticket','trophy','store','camera','teacup','gift','binoculars','food-cloche'].map((n,i)=>{
+  const a=-Math.PI/2+i/12*Math.PI*2+.26,x=960+830*Math.cos(a),y=540+390*Math.sin(a);
+  return el(J.d,{left:px(x-75),top:px(y-75),width:'150px',height:'150px'},img(n,150));
+});
+const jW=T(J.d,'Cafés. Stores. Gyms. Galleries.',{center:1,y:486,size:88});
+const jL=T(J.d,'Every place\ncan be {a} {hunt.}',{center:1,y:410,size:120});
+J.r=t=>{
+  jIcons.forEach((e,i)=>{const q=prog(t,48.125+i*.125,.7);op(e,q>0?1:0);
+    tf(e,`translateY(${(Math.sin(t*1.7+i)*9).toFixed(1)}px) scale(${E.sp(q).toFixed(4)}) rotate(${((1-E.o3(q))*-24+Math.sin(t*1.3+i*2)*3).toFixed(2)}deg)`)});
+  kin(jW,t,49.6,51.95,{starts:[49.6,50.1,50.6,51.1]});kin(jL,t,52.15,null);bars(jL,t,52.75);
+};
+
+/* =================== K · end card (53.4–60) =================== */
+const K=Scene(53.4,60.1,C.ink,t=>circ(E.o5(prog(t,53.4,.6))));
+const kLock=el(K.d,{left:0,top:'262px',width:'1920px',display:'flex',justifyContent:'center',alignItems:'center',gap:'50px'});
+const kMark=Mark(kLock,200,C.bone,C.pink);
+const kWord=T(kLock,'Trivvo',{inline:1,chars:1,size:165,color:C.bone});
+const kBeats=el(K.d,{left:0,top:'580px',width:'1920px',display:'flex',justifyContent:'center',gap:'46px'});
+const kb=['Show up.','Do the task.','Get paid.'].map(s=>T(kBeats,s,{inline:1,size:70,color:C.pink}));
+const kTag=T(K.d,'Get paid to explore your city.',{center:1,y:704,size:48,weight:600,ls:-.02,color:'rgba(244,241,234,.82)'});
+const kSoon=el(K.d,{left:0,top:'815px',width:'1920px',display:'flex',justifyContent:'center'});
+const kPill=el(kSoon,{position:'relative',height:'84px',lineHeight:'84px',padding:'0 46px',borderRadius:'42px',background:C.pink,color:C.ink,fontSize:'36px',fontWeight:800,letterSpacing:'-0.02em',opacity:0},'Coming soon');
+const kRing=el(kPill,{left:0,top:0,right:0,bottom:0,borderRadius:'42px',border:'3px solid '+C.pink,opacity:0});
+const kFade=el(K.d,{left:0,top:0,width:'1920px',height:'1080px',background:C.ink,opacity:0});
+K.r=t=>{
+  markAnim(kMark,t,54.1,54.3);kin(kWord,t,54.45,null,{stagger:.045});
+  kb.forEach((x,i)=>kin(x,t,55+i*.5,null,{stagger:.05}));kin(kTag,t,56.6,null,{stagger:.03});
+  const q=prog(t,57.45,.75);op(kPill,q>0?1:0);tf(kPill,`scale(${E.sp(q).toFixed(4)})`);
+  const rq=prog(t,57.6,1.2);op(kRing,rq>0&&rq<1?.8*(1-rq):0);tf(kRing,`scale(${(1+.18*E.ox(rq)).toFixed(4)},${(1+.5*E.ox(rq)).toFixed(4)})`);
+  op(kFade,E.io3(prog(t,59.2,.8)));
+};
+
+/* ---------- driver ---------- */
+function render(t){scenes.forEach(s=>{const on=t>=s.a&&t<s.b;s.d.style.display=on?'block':'none';if(on){if(s.clip)s.d.style.clipPath=s.clip(t);s.r(t)}})}
+window.ready=Promise.all(['500','600','700','800'].map(w=>document.fonts.load(`${w} 100px J`,'₹Aa…')))
+  .then(()=>document.fonts.ready)
+  .then(()=>Promise.all([...document.images].map(i=>i.complete?1:new Promise(r=>{i.onload=i.onerror=r}))))
+  .then(()=>{
+    texts.forEach(decorate);
+    gRows.forEach(r=>r.strike.style.width=px(r.txt.offsetWidth+8));
+    cMap.L=cMap.mp.getTotalLength();eMap.L=eMap.mp.getTotalLength();
+    render(0);return document.fonts.check('800 100px J');
+  });
+window.seek=render;
+</script>
+</body>
+</html>
