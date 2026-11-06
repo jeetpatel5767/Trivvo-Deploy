@@ -37,6 +37,7 @@ router.get('/profile/:wallet', async (req: Request, res: Response) => {
             totalEarned += rewardNum;
 
             recentActivity.push({
+                huntId: row.hunt_id,
                 title: row.title,
                 reward: rewardNum.toFixed(2),
                 timestamp: row.arrival_time,
