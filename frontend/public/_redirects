@@ -1,0 +1,3 @@
+# SPA fallback: every deep link (e.g. the QR target /h/:id?k=…) serves index.html
+# so the client router can handle it on a cold load. Netlify / Render static sites.
+/*    /index.html   200
