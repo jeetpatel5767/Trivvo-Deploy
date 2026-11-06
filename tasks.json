@@ -22,7 +22,7 @@
     "blocked",
     "cut"
   ],
-  "next_task": "H ship phase: H1 deploy (Render+trivvo.fun), H3 seed demo data, H4 README; then H2/H5/H6 (user). All feature code done.",
+  "next_task": "User steps (0G key, World Mini App, hosting) then demo reset + video + submission",
   "feature_freeze": "2026-11-06 22:00 IST",
   "deadline": "2026-11-07 09:00 IST",
   "phases": [
@@ -533,9 +533,15 @@
       "0G: X-0G-Provider-Trust-Mode header from ZG_TRUST_MODE (must match key default); verifiable flag only true for verified/private; AI approvals now write photo_approved receipts with the 0G request id to Hedera; photo-check needs check-in, valid task, not already approved/in review, max 5 tries (no 0G call after); hunts need 1-10 tasks; rubric preview max 10.",
       "World: /verify/world returns success (alreadyVerified) for the same wallet repeating; different wallet same human = 409 duplicate_human; arrival page tries /scan first and only shows World ID on human_check_required; WorldCheck passes backend refusal codes to the page (denied screen works); VITE_WORLD_ENV for staging/simulator.",
       "Hunter wallet: MiniKit 2.0.3 worldApp() wagmi connector (used inside World App), MiniKit.install at startup, World Chain mainnet in wagmi chains; backend sign-in accepts Safe smart-account signatures (ERC-1271 or Safe checkSignatures, Safe only); hunter routes wrapped in RequireWallet hunter.",
-      "Profile: in-progress hunts open /tasks/:id."
+      "Profile: in-progress hunts open /tasks/:id.",
+      "Funding resumes from saved progress (no second escrow hunt); already-funded hunts refused.",
+      "Withdraw: switchChain + pinned chain, only after the hunt ends, backend reads FundsWithdrawn from chain (wrong hunt/vendor/tx refused).",
+      "Main reward auto-paid when the last task is approved (0G or vendor) via services/payout.ts; task_completed is the payout lock (no double pay); claim returns already_paid with the real tx, paying while in flight; tasks page polls while a photo is with the vendor.",
+      "Create hunt: title, real location and >=1 task required, Use my current location button, no New York default; payout copy now true.",
+      "README rewritten for judges; docs/world-debrief.md filled (2 timings to confirm).",
+      "backend/scripts/reset-demo.js: backs up all tables to database/backup-*.json (git-ignored), empties them only with --yes."
     ],
-    "tested": "fix-test 11/11 on :3003 (chain/0G/Hedera off), incl. forged contract-wallet signature refused (first version accepted WETH; fixed); A3 suite passes; tsc + vite build pass; browser: hunter wallet step, hunts, vendor guard, login render with no console errors.",
+    "tested": "fix-test 11/11 on :3003 (chain/0G/Hedera off), incl. forged contract-wallet signature refused (first version accepted WETH; fixed); A3 suite passes; tsc + vite build pass; browser: hunter wallet step, hunts, vendor guard, login render with no console errors. | 2026-11-06 later: pay-test 12/12 on a local Hardhat chain (fund confirmed, arrival paid, photo to vendor review, approval auto-pays main reward exactly once while a simultaneous Claim tap is running, refresh returns already_paid with the real tx, one reward_paid event, withdraw checks wrong hunt / non-withdrawal tx / real one); frontend tsc + vite build pass.",
     "not_tested": "Real World App sign-in (MiniKit signMessage -> Safe signature) and verify inside World App: needs the mini app registered and a phone. 0G with request ids: 0G TEE providers were failing on 2026-11-06; needs key trust mode change or a working provider.",
     "manual_steps": [
       "pc.0g.ai -> API Key -> Edit: set trust mode to verified (or create a new key), then backend/.env ZG_TRUST_MODE=verified and ZG_MODEL=0gm-1.0-35b-a3b. Or ask the 0G booth which vision model has a working TEE provider today.",
@@ -543,12 +549,9 @@
       "Hosting: set VITE_API_URL (and VITE_WORLD_APP_ID) on trivvo.fun hosting; ZG_TRUST_MODE, SESSION_SECRET etc. on Render; redeploy."
     ],
     "still_open_from_review": [
-      "FundHuntPage double-fund if backend sync fails after the 3 txs",
-      "main reward only on hunter Claim (copy says Approve to pay)",
-      "RewardConfirmPage refresh shows already_paid as error",
-      "HuntManagePage withdraw: no switchChain, shows before end, backend trusts txHash",
-      "CreateHuntPage: blank location saves New York",
-      "README + world-debrief + video + submission"
+      "Run backend/scripts/reset-demo.js --yes right before recording, then create + fund 2 demo hunts from the vendor screens (one main reward <= $5, one > $5).",
+      "Push branch ethglobal-mumbai and tag pre-event-baseline to GitHub (README links to the tag).",
+      "User steps: 0G key trust mode, World Mini App registration, hosting env + redeploy, video, submission."
     ]
   }
 }

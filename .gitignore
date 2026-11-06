@@ -50,3 +50,6 @@ database/*.db
 
 # Claude Code local artifacts (contains prompt history)
 .claude-mods/
+
+# Local DB backups from database/reset-demo.js (may contain wallet data)
+database/backup-*.json
