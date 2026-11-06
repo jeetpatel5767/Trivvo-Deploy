@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
-import { Check, Camera, RotateCcw, Clock, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Check, Camera, ImageUp, RotateCcw, Clock, AlertCircle, ShieldCheck } from 'lucide-react';
 import { getProgress, photoCheck } from '../../lib/api';
 import { downscalePhoto } from '../../lib/photo';
 import { AppBar, Block, Button, Money, Panel, SectionLabel, Skeleton } from '../../ui';
@@ -52,7 +52,8 @@ export default function TasksPage() {
   const [maxAttempts, setMaxAttempts] = useState(5);
   const [busyTask, setBusyTask] = useState<number | null>(null);
   const [loadError, setLoadError] = useState('');
-  const fileInputs = useRef<Record<number, HTMLInputElement | null>>({});
+  // Two pickers per task: "camera" opens the camera directly, "upload" lets the hunter pick from the gallery.
+  const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const load = async () => {
     if (!huntId) return;
@@ -231,32 +232,44 @@ export default function TasksPage() {
                       {t.status !== 'approved' && t.status !== 'vendor_review' && (
                         <div style={{ marginTop: 10 }}>
                           {t.status === 'blocked' ? (
-                            <p className="caption t-muted">No attempts left — the vendor will review this one.</p>
+                            <p className="caption t-muted">No tries left for this task.</p>
                           ) : (
                             <>
-                              <input
-                                ref={(el) => { fileInputs.current[t.taskIndex] = el; }}
-                                type="file"
-                                accept="image/*"
-                                capture="environment"
-                                style={{ display: 'none' }}
-                                onChange={(e) => {
-                                  const f = e.target.files?.[0];
-                                  if (f) void submitPhoto(t.taskIndex, f);
-                                  e.target.value = '';
-                                }}
-                              />
+                              {(['camera', 'upload'] as const).map((mode) => (
+                                <input
+                                  key={mode}
+                                  ref={(el) => { fileInputs.current[`${t.taskIndex}-${mode}`] = el; }}
+                                  type="file"
+                                  accept="image/*"
+                                  {...(mode === 'camera' ? { capture: 'environment' as const } : {})}
+                                  style={{ display: 'none' }}
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) void submitPhoto(t.taskIndex, f);
+                                    e.target.value = '';
+                                  }}
+                                />
+                              ))}
                               <Button
                                 variant={t.status === 'retry' ? 'secondary' : 'ink'}
                                 size="md"
                                 loading={busy}
-                                onClick={() => fileInputs.current[t.taskIndex]?.click()}
+                                onClick={() => fileInputs.current[`${t.taskIndex}-camera`]?.click()}
                               >
                                 {t.status === 'retry' ? (
                                   <><RotateCcw size={15} strokeWidth={2.4} /> Retake</>
                                 ) : (
                                   <><Camera size={15} strokeWidth={2.4} /> Take photo</>
                                 )}
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                size="md"
+                                disabled={busy}
+                                onClick={() => fileInputs.current[`${t.taskIndex}-upload`]?.click()}
+                                style={{ marginLeft: 8 }}
+                              >
+                                <ImageUp size={15} strokeWidth={2.4} /> Upload
                               </Button>
                               {t.attemptsUsed > 0 && (
                                 <span className="caption t-subtle" style={{ marginLeft: 10 }}>

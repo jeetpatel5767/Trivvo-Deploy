@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ImageUp } from 'lucide-react';
 import { getHunt } from '../../lib/api';
-import { decodeQrFromImage } from '../../lib/qrImage';
+import { decodeQrFromImage, decodeQrFromVideo } from '../../lib/qrImage';
 import { totalReward, type Hunt } from '../../lib/types';
 import { AppBar, Button, Money } from '../../ui';
 import { TabBar } from '../../components/TabBar';
@@ -86,8 +86,8 @@ function Reticle({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement | nu
  *  - Opened from the store QR (/h/:id?k=…): a qrSecret arrives in route state, so we
  *    check in straight away, no camera needed.
  *  - Opened in-app ("Scan QR to start"): we open the camera and read the code with the
- *    browser's BarcodeDetector where it exists; otherwise we tell the hunter to use
- *    their phone's own camera on the code.
+ *    browser's BarcodeDetector where it exists, otherwise with jsQR on the camera frames
+ *    (iPhone and World App have no BarcodeDetector). Uploading a picture always works too.
  */
 export default function ScanPage() {
   const navigate = useNavigate();
@@ -105,7 +105,6 @@ export default function ScanPage() {
   // Capability note is decided once, up front, so the camera effect never has to setState for it.
   const [cameraNote, setCameraNote] = useState(() => {
     if (stateSecret) return ''; // arriving from the QR link — no in-app camera needed
-    if (!getBarcodeDetector()) return 'This browser cannot scan with the camera. Upload a picture of the code below, or point your phone camera at it.';
     if (!navigator.mediaDevices?.getUserMedia) return 'No camera available here. Upload a picture of the code below, or point your phone camera at it.';
     return '';
   });
@@ -181,12 +180,14 @@ export default function ScanPage() {
   // Path 2: in-app scanning — open the camera and watch for a Tr!vvo code.
   useEffect(() => {
     if (stateSecret) return; // Path 1 handles it; no camera needed.
-    const Detector = getBarcodeDetector();
-    // Capability already reported via the cameraNote initializer; nothing to start here.
-    if (!Detector || !navigator.mediaDevices?.getUserMedia) return;
+    // No camera at all is already reported via the cameraNote initializer.
+    if (!navigator.mediaDevices?.getUserMedia) return;
 
     let cancelled = false;
-    const detector = new Detector({ formats: ['qr_code'] });
+    const Detector = getBarcodeDetector();
+    const detector = Detector ? new Detector({ formats: ['qr_code'] }) : null;
+    const frame = document.createElement('canvas');
+    let lastJsQr = 0;
 
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: 'environment' } })
@@ -204,8 +205,16 @@ export default function ScanPage() {
         const tick = async () => {
           if (cancelled || busyRef.current) return;
           try {
-            const codes = await detector.detect(video);
-            const hit = codes.map((c) => parseHuntCode(c.rawValue)).find(Boolean);
+            let texts: string[] = [];
+            if (detector) {
+              texts = (await detector.detect(video)).map((c) => c.rawValue);
+            } else if (performance.now() - lastJsQr > 160) {
+              // jsQR is slower than the native detector: ~6 reads a second is plenty.
+              lastJsQr = performance.now();
+              const text = decodeQrFromVideo(video, frame);
+              if (text) texts = [text];
+            }
+            const hit = texts.map((t) => parseHuntCode(t)).find(Boolean);
             if (hit) {
               void proceed(hit.huntId, hit.qrSecret);
               return;
@@ -268,7 +277,7 @@ export default function ScanPage() {
             </p>
           )}
 
-          {/* Desktop: read the code from a saved screenshot or photo instead of the camera. */}
+          {/* Or read the code from a picture: a screenshot, a gallery photo, or a new camera shot. */}
           <input
             ref={fileRef}
             type="file"
