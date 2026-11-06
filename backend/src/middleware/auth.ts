@@ -39,19 +39,54 @@ export function readSession(token: string): string | null {
  *   Wallet: 0x...
  *   Issued: <ISO time>
  * Returns the wallet that signed it, or an error code.
+ *
+ * A normal wallet (MetaMask) signs with its own key. A World App wallet is a Safe smart
+ * account on World Chain, signed by its owner key, so it is checked against the contract
+ * itself (ERC-1271 isValidSignature, or the Safe's checkSignatures). Every path proves the
+ * named wallet signed this exact message.
  */
-export function checkSignIn(message: string, signature: string): { wallet?: string; code?: string } {
-    let signer: string;
+export async function checkSignIn(message: string, signature: string): Promise<{ wallet?: string; code?: string }> {
+    const wallet = /^Wallet: (0x[0-9a-fA-F]{40})$/m.exec(message)?.[1]?.toLowerCase();
+    const issued = Date.parse(/^Issued: (.+)$/m.exec(message)?.[1] ?? '');
+    if (!message.startsWith('Sign in to Tr!vvo') || !wallet) return { code: 'bad_message' };
+    if (!(Math.abs(Date.now() - issued) <= MESSAGE_MAX_AGE_MS)) return { code: 'message_expired' };
+
+    let signer = '';
     try {
         signer = ethers.verifyMessage(message, signature).toLowerCase();
     } catch {
-        return { code: 'bad_signature' };
+        /* not a plain key signature: may still be a smart-account one */
     }
-    const wallet = /^Wallet: (0x[0-9a-fA-F]{40})$/m.exec(message)?.[1]?.toLowerCase();
-    const issued = Date.parse(/^Issued: (.+)$/m.exec(message)?.[1] ?? '');
-    if (!message.startsWith('Sign in to Tr!vvo') || wallet !== signer) return { code: 'bad_message' };
-    if (!(Math.abs(Date.now() - issued) <= MESSAGE_MAX_AGE_MS)) return { code: 'message_expired' };
-    return { wallet: signer };
+    if (signer === wallet) return { wallet };
+    if (await isSmartAccountSignature(wallet, message, signature)) return { wallet };
+    return { code: signer ? 'bad_message' : 'bad_signature' };
+}
+
+// World App wallets live on World Chain mainnet (480), whatever chain the escrow uses.
+const SMART_ACCOUNT_RPC = process.env.WORLDCHAIN_MAINNET_RPC_URL || 'https://worldchain-mainnet.g.alchemy.com/public';
+const ERC1271_MAGIC = '0x1626ba7e';
+const SMART_ACCOUNT_ABI = [
+    'function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)',
+    'function getThreshold() view returns (uint256)',
+    'function checkSignatures(bytes32 dataHash, bytes data, bytes signatures) view',
+];
+
+async function isSmartAccountSignature(wallet: string, message: string, signature: string): Promise<boolean> {
+    try {
+        const provider = new ethers.JsonRpcProvider(SMART_ACCOUNT_RPC);
+        if ((await provider.getCode(wallet)) === '0x') return false; // not a contract
+        const account = new ethers.Contract(wallet, SMART_ACCOUNT_ABI, provider);
+        const hash = ethers.hashMessage(message);
+        const magic = await account.isValidSignature(hash, signature).catch(() => null);
+        if (magic === ERC1271_MAGIC) return true;
+        // Safe's checkSignatures reverts unless the owners signed this hash. Only ask a real Safe:
+        // any contract with a catch-all fallback (e.g. WETH) would otherwise "succeed" here.
+        const threshold = await account.getThreshold().catch(() => 0n);
+        if (!(threshold > 0n)) return false;
+        return await account.checkSignatures(hash, '0x', signature).then(() => true, () => false);
+    } catch {
+        return false;
+    }
 }
 
 /** Requires `Authorization: Bearer <token>`; sets (req as any).walletAddress. */
