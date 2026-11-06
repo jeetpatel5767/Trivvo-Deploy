@@ -1,0 +1,19 @@
+{
+    "name": "trivvo-contracts",
+    "version": "1.0.0",
+    "description": "Tr!vvo Smart Contracts",
+    "scripts": {
+        "compile": "npx hardhat compile",
+        "test": "npx hardhat test",
+        "deploy:fuji": "npx hardhat run scripts/deploy.ts --network fuji"
+    },
+    "devDependencies": {
+        "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+        "@openzeppelin/contracts": "^5.0.2",
+        "hardhat": "^2.22.6",
+        "typescript": "^5.5.4"
+    },
+    "dependencies": {
+        "dotenv": "^17.3.1"
+    }
+}
