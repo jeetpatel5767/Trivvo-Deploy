@@ -308,15 +308,28 @@ router.post('/hunts/:id/withdraw', requireAuth, async (req: Request, res: Respon
     try {
         const { id } = req.params;
         const { txHash } = req.body;
-        if (!(await isHuntOwner(id, (req as any).walletAddress))) {
+        const wallet = (req as any).walletAddress as string;
+        if (!(await isHuntOwner(id, wallet))) {
             return res.status(403).json({ error: 'Not the vendor of this hunt', code: 'not_owner' });
+        }
+
+        // The hunt ends only after the chain shows this vendor withdrew this hunt's escrow.
+        let amount: string | undefined;
+        if (blockchainService.configured) {
+            const hunt = (await pool.query('SELECT contract_hunt_id FROM hunts WHERE hunt_id = $1', [id])).rows[0];
+            const w = await blockchainService.readWithdrawal(String(txHash || ''));
+            const fail = w.code
+                || (w.contractHuntId !== hunt?.contract_hunt_id ? 'wrong_hunt' : undefined)
+                || (w.vendor !== wallet ? 'wrong_vendor' : undefined);
+            if (fail) return res.status(400).json({ error: 'That transaction is not a withdrawal of this hunt.', code: fail });
+            amount = w.amount;
         }
 
         await pool.query(
             `UPDATE hunts SET status = 'ended' WHERE hunt_id = $1`,
             [id]
         );
-        await recordReceipt({ huntId: id, type: 'hunt_withdrawn', wallet: (req as any).walletAddress, txHash });
+        await recordReceipt({ huntId: id, type: 'hunt_withdrawn', wallet, txHash, detail: amount ? { amount } : {} });
 
         return res.json({ success: true, txHash });
     } catch (error: any) {

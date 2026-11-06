@@ -1,7 +1,8 @@
 import { Icon } from '../../components/Icon';
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { switchChain, waitForTransactionReceipt, writeContract, getChainId } from 'wagmi/actions';
+import { config, APP_CHAIN } from '../../lib/wagmi';
 import { CheckCircle2 } from 'lucide-react';
 import { CONTRACTS, HUNT_ESCROW_ABI } from '../../lib/contracts';
 import { getHunt, getParticipants, withdrawHunt, OFFLINE } from '../../lib/api';
@@ -34,8 +35,6 @@ export default function HuntManagePage() {
   const [withdrawing, setWithdrawing] = useState(false);
   useNow(30_000); // keeps "Starts in" / "left" and the status badge moving without a reload
 
-  const { writeContract: withdrawOnChain, data: withdrawTx, error: chainError } = useWriteContract();
-  const { isSuccess: withdrawDone } = useWaitForTransactionReceipt({ hash: withdrawTx });
 
   useEffect(() => {
     if (!id) return;
@@ -50,29 +49,6 @@ export default function HuntManagePage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  useEffect(() => {
-    if (withdrawDone && hunt?.hunt_id) {
-      (async () => {
-        try {
-          await withdrawHunt(hunt.hunt_id, withdrawTx as string);
-          setHunt((p) => (p ? { ...p, status: 'ended' } : p));
-        } catch {
-          setError('The funds came back, but we could not sync that to your dashboard.');
-        } finally {
-          setWithdrawing(false);
-        }
-      })();
-    }
-  }, [withdrawDone, hunt?.hunt_id, withdrawTx]);
-
-  useEffect(() => {
-    if (chainError) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setError((chainError as { shortMessage?: string }).shortMessage || chainError.message);
-      setWithdrawing(false);
-    }
-  }, [chainError]);
-
   const handleWithdraw = async () => {
     setError('');
     setWithdrawing(true);
@@ -84,14 +60,43 @@ export default function HuntManagePage() {
       return setWithdrawing(false);
     }
 
-    if (!hunt || hunt.contract_hunt_id == null) return setWithdrawing(false);
-    withdrawOnChain({
-      address: CONTRACTS.HUNT_ESCROW as `0x${string}`,
-      abi: HUNT_ESCROW_ABI,
-      functionName: 'withdrawRemaining',
-      args: [BigInt(hunt.contract_hunt_id)],
-    });
+    if (!hunt) return setWithdrawing(false);
+    if (hunt.contract_hunt_id == null) {
+      setError('This hunt has no escrow on chain, so there is nothing to withdraw.');
+      return setWithdrawing(false);
+    }
+    const chainId = APP_CHAIN.id;
+    let txHash: `0x${string}` | null = null;
+    try {
+      if (getChainId(config) !== chainId) await switchChain(config, { chainId });
+      txHash = await writeContract(config, {
+        chainId,
+        address: CONTRACTS.HUNT_ESCROW as `0x${string}`,
+        abi: HUNT_ESCROW_ABI,
+        functionName: 'withdrawRemaining',
+        args: [BigInt(hunt.contract_hunt_id)],
+      });
+      await waitForTransactionReceipt(config, { chainId, hash: txHash });
+      // The backend reads this transaction from the chain before marking the hunt ended.
+      await withdrawHunt(hunt.hunt_id, txHash);
+      setHunt((p) => (p ? { ...p, status: 'ended' } : p));
+    } catch (err: unknown) {
+      const e = err as { shortMessage?: string; message?: string; response?: { data?: { error?: string } } };
+      const text = e?.response?.data?.error || e?.shortMessage || e?.message || 'That did not go through.';
+      setError(
+        /reject|denied/i.test(text)
+          ? 'You cancelled that in your wallet. Nothing was moved.'
+          : txHash
+            ? `The funds came back, but we could not record it: ${text.split('\n')[0]}`
+            : text.split('\n')[0]
+      );
+    } finally {
+      setWithdrawing(false);
+    }
   };
+
+  // Withdraw is only offered once the hunt is over (hunters are owed the escrow until then).
+  const canWithdraw = !!hunt && hunt.status !== 'ended' && hunt.status !== 'pending' && new Date(hunt.end_time).getTime() < Date.now();
 
   if (loading) {
     return (
@@ -206,11 +211,17 @@ export default function HuntManagePage() {
       )}
 
       <div className="pad" style={{ marginTop: 32 }}>
-        <Button variant="primary" size="lg" block loading={withdrawing} onClick={handleWithdraw}>
-          Withdraw unclaimed funds
-        </Button>
+        {canWithdraw ? (
+          <Button variant="primary" size="lg" block loading={withdrawing} onClick={handleWithdraw}>
+            Withdraw unclaimed funds
+          </Button>
+        ) : null}
         <p className="caption t-subtle" style={{ textAlign: 'center', marginTop: 12 }}>
-          Returns whatever is left in escrow once the hunt has ended.
+          {hunt?.status === 'ended'
+            ? 'Unclaimed funds were returned to your wallet.'
+            : canWithdraw
+              ? 'Returns whatever is left in escrow to your wallet.'
+              : 'Once the hunt ends you can withdraw whatever is left in escrow.'}
         </p>
       </div>
     </div>

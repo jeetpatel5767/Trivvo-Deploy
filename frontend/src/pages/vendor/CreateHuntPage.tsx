@@ -77,6 +77,24 @@ export default function CreateHuntPage() {
   const [rubricLoading, setRubricLoading] = useState(false);
 
   const set = (field: string, value: string) => setForm({ ...form, [field]: value });
+
+  // The vendor is usually standing in the shop: fill the coordinates from the device.
+  const [locating, setLocating] = useState(false);
+  const useMyLocation = () => {
+    if (!navigator.geolocation) return toast.show('This browser cannot read your location. Type the coordinates.');
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setForm((f) => ({ ...f, locationLat: pos.coords.latitude.toFixed(6), locationLng: pos.coords.longitude.toFixed(6) }));
+        setLocating(false);
+      },
+      () => {
+        toast.show('Could not read your location. Allow location access, or type the coordinates.');
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10_000 }
+    );
+  };
   const addTask = () => { setForm({ ...form, tasks: [...form.tasks, ''] }); setRubrics(null); };
   const setTask = (i: number, v: string) => {
     setForm({ ...form, tasks: form.tasks.map((t, idx) => (idx === i ? v : t)) });
@@ -110,6 +128,21 @@ export default function CreateHuntPage() {
       toast.show('Add your business name. Hunters see it on the hunt.');
       return;
     }
+    if (!form.title.trim()) {
+      toast.show('Give the hunt a title.');
+      return;
+    }
+    const lat = parseFloat(form.locationLat);
+    const lng = parseFloat(form.locationLng);
+    // Hunters' location check uses these, so never guess them.
+    if (!(Math.abs(lat) <= 90) || !(Math.abs(lng) <= 180) || (lat === 0 && lng === 0)) {
+      toast.show('Add where the hunt is: tap "Use my current location" or type the coordinates.');
+      return;
+    }
+    if (form.tasks.filter((t) => t.trim()).length === 0) {
+      toast.show('Add at least one task. The main reward is paid when every task passes.');
+      return;
+    }
     if (!validTimes) {
       toast.show('Check the start and end times.');
       return;
@@ -128,8 +161,8 @@ export default function CreateHuntPage() {
         vendorWallet: address,
         title: form.title,
         description: form.description,
-        locationLat: parseFloat(form.locationLat) || 40.7128,
-        locationLng: parseFloat(form.locationLng) || -74.006,
+        locationLat: lat,
+        locationLng: lng,
         locationName: form.locationName,
         startTime: form.startTime ? new Date(form.startTime).toISOString() : new Date().toISOString(),
         endTime: form.endTime
@@ -202,6 +235,11 @@ export default function CreateHuntPage() {
                   </Field>
                 </div>
               </div>
+            </Block>
+            <Block tight>
+              <Button variant="secondary" size="sm" loading={locating} onClick={useMyLocation}>
+                Use my current location
+              </Button>
             </Block>
           </Panel>
         </section>
@@ -321,7 +359,7 @@ export default function CreateHuntPage() {
               </Field>
             </Block>
             <Block>
-              <Field label="On completion" hint="Paid once you verify the tasks.">
+              <Field label="On completion" hint="Paid automatically once every task passes.">
                 <UnitInput unit="USDC" value={form.mainReward} onChange={(e) => set('mainReward', e.target.value)} />
               </Field>
             </Block>

@@ -42,14 +42,30 @@ export default function RewardConfirmPage() {
     setMessage('');
     try {
       const { data } = await claimMainReward(huntId);
+      if (data.code === 'paying') {
+        // The payout started on its own when the last task passed; ask again in a moment.
+        claimingRef.current = false;
+        setTimeout(() => void claim(), 3000);
+        return;
+      }
       setAmount(Number(data.mainReward) || amount);
       setTxHash(data.rewardTxHash || '');
       setExplorerUrl(data.explorerUrl || '');
       setPhase('paid');
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { code?: string; error?: string } } };
-      const code = e.response?.data?.code;
+      const e = err as {
+        response?: { data?: { code?: string; error?: string; mainReward?: string; rewardTxHash?: string; explorerUrl?: string } };
+      };
+      const d = e.response?.data;
+      const code = d?.code;
       if (code === 'strong_credential_required') setPhase('strong');
+      else if (code === 'already_paid') {
+        // Opened again after the payout: show the real payout, not an error.
+        setAmount(Number(d?.mainReward) || amount);
+        setTxHash(d?.rewardTxHash || '');
+        setExplorerUrl(d?.explorerUrl || '');
+        setPhase('paid');
+      }
       else {
         setMessage(e.response?.data?.error || 'That did not go through. Try again.');
         setPhase('error');

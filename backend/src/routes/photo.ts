@@ -5,6 +5,7 @@ import { decideOutcome, MAX_PHOTO_ATTEMPTS, AiResult } from '../services/photoDe
 import { getHuntProgress } from '../services/taskProgress';
 import { promptForTask } from '../services/rubric';
 import { recordReceipt } from '../services/hederaReceipts';
+import { autoPayIfComplete } from '../services/payout';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -99,6 +100,8 @@ router.post('/photo-check', requireAuth, async (req: Request, res: Response) => 
                 huntId, type: 'photo_approved', wallet, zgRequestId: ai.requestId,
                 detail: { taskIndex, by: '0g', model: aiModel, confidence: ai.confidence },
             });
+            // The 0G verdict moves the money: if that was the last task, the main reward goes out now.
+            autoPayIfComplete(huntId, wallet);
         }
 
         return res.json({

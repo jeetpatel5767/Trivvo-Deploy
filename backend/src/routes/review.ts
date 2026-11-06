@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { recordReceipt } from '../services/hederaReceipts';
+import { autoPayIfComplete } from '../services/payout';
 import { requireAuth, isHuntOwner } from '../middleware/auth';
 
 const router = Router();
@@ -72,6 +73,8 @@ router.post('/reviews/:id/decision', requireAuth, async (req: Request, res: Resp
                 huntId: proof.hunt_id, type: 'photo_approved', wallet: proof.wallet_address,
                 zgRequestId: proof.zg_request_id, detail: { taskIndex: proof.task_index, by: 'vendor' },
             });
+            // Approving the hunter's last task pays their main reward right away.
+            autoPayIfComplete(proof.hunt_id, proof.wallet_address);
         }
 
         return res.json({ success: true, decision });

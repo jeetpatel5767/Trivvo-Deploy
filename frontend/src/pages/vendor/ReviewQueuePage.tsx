@@ -71,7 +71,7 @@ export default function ReviewQueuePage() {
           Review queue.
         </h1>
         <p className="body-sm" style={{ marginTop: 12, color: 'rgba(244,241,234,0.62)' }}>
-          The AI sent these over because it wasn&apos;t sure. Approve to pay, reject to ask for a retake.
+          The AI sent these over because it wasn&apos;t sure. Approve to pass the task (the hunter is paid the moment all tasks pass), reject to ask for a retake.
         </p>
       </div>
 
