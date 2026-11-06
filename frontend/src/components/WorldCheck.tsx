@@ -62,6 +62,9 @@ export function WorldCheck({
 }) {
   const [open, setOpen] = useState(false);
   const [rpContext, setRpContext] = useState<RpContext | null>(null);
+  // Each hunt has its own World action (World allows one verification per person per action),
+  // so the backend tells us which one to use for this hunt.
+  const [worldAction, setWorldAction] = useState<string>(action);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -72,7 +75,11 @@ export function WorldCheck({
     setError('');
     setBusy(true);
     try {
-      const { data } = await api.post('/verify/world/signature', { action });
+      const { data } = await api.post('/verify/world/signature', {
+        huntId,
+        kind: action === 'tr-vvo-main' ? 'main' : 'arrival',
+      });
+      setWorldAction(data.action);
       // Backend returns `sig`; the IDKit RpContext field is `signature`.
       setRpContext({
         rp_id: data.rp_id,
@@ -99,7 +106,7 @@ export function WorldCheck({
 
   const send = async (result: IDKitResult): Promise<void> => {
     try {
-      const { data } = await api.post('/verify/world', { huntId, walletAddress, action, result });
+      const { data } = await api.post('/verify/world', { huntId, walletAddress, action: worldAction, result });
       if (!data?.success) throw new Error(data?.error || 'Human check failed');
       nullifierRef.current = data.nullifierHash as string | undefined;
     } catch (e: unknown) {
@@ -110,6 +117,11 @@ export function WorldCheck({
   };
 
   const handleError = (code: string) => {
+    // World itself refuses a second check for this hunt's action: the same person already claimed here.
+    if ((code === 'max_verifications_reached' || code === 'nullifier_replayed') && onRefused) {
+      refusalRef.current = null;
+      return onRefused('duplicate_human', 'This person has already claimed in this hunt.');
+    }
     const refusal = refusalRef.current;
     refusalRef.current = null;
     if (refusal && onRefused) return onRefused(refusal.code, refusal.message);
@@ -157,7 +169,7 @@ export function WorldCheck({
             open={open}
             onOpenChange={setOpen}
             app_id={WORLD_APP_ID}
-            action={action}
+            action={worldAction}
             rp_context={rpContext}
             environment={WORLD_ENV}
             allow_legacy_proofs={false}
@@ -176,7 +188,7 @@ export function WorldCheck({
             open={open}
             onOpenChange={setOpen}
             app_id={WORLD_APP_ID}
-            action={action}
+            action={worldAction}
             rp_context={rpContext}
             environment={WORLD_ENV}
             allow_legacy_proofs={true}
