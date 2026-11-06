@@ -36,3 +36,22 @@ export async function decodeQrFromImage(file: Blob): Promise<string | null> {
   const hit = jsQR(pixels.data, width, height, { inversionAttempts: 'attemptBoth' });
   return hit?.data ?? null;
 }
+
+/**
+ * Read a QR code from the live camera picture. Used where the browser has no BarcodeDetector
+ * (iPhone browsers and World App's in-app browser), so the camera still scans everywhere.
+ * The frame is scaled down to 640px so scanning several times a second stays cheap.
+ */
+export function decodeQrFromVideo(video: HTMLVideoElement, canvas: HTMLCanvasElement): string | null {
+  if (!video.videoWidth || !video.videoHeight) return null; // camera not started yet
+  const scale = Math.min(1, 640 / Math.max(video.videoWidth, video.videoHeight));
+  const width = Math.round(video.videoWidth * scale);
+  const height = Math.round(video.videoHeight * scale);
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(video, 0, 0, width, height);
+  const hit = jsQR(ctx.getImageData(0, 0, width, height).data, width, height, { inversionAttempts: 'dontInvert' });
+  return hit?.data ?? null;
+}

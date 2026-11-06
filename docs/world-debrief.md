@@ -18,7 +18,8 @@
 2. **Credential identifiers.** The names returned in v4 results (`proof_of_human`, `passport`, `selfie`, `mnc`, plus legacy ones like `document`) were not listed in one place; we found them in the type definitions and confirmed them with a live proof.
 3. **Errors from our own backend are swallowed by the widget.** If `handleVerify` throws, the widget reports only `failed_by_host_app`, so our `duplicate_human` code was lost and we had to carry it through a ref ourselves.
 4. **Re-verification.** A user who already verified for a hunt and verifies again gets the same nullifier; we had to make our endpoint treat "same wallet, same nullifier" as success, or returning users were locked out.
-5. **Smart-account wallets.** World App wallets are Safes, so a plain `personal_sign` check fails; we added ERC-1271 / Safe `checkSignatures` verification on World Chain to sign hunters in.
+5. **One verification per person per action, for life.** We first used one shared action for every hunt, so a hunter could verify for their first hunt only; World App answered "Already verified" for every later hunt. The fix World recommends is a separate action per one-time operation: the backend now creates `tr-vvo-<huntId>-arrival` / `-main` through the Developer Portal API (`POST /api/v2/create-action/{app_id}`, `max_verifications: 1`) the first time a hunt needs it, and only accepts proofs whose `action` is that hunt's. The create-action endpoint is only documented as a v2 "incognito action" route, which made it unclear at first whether it works with v4 RP-signed requests.
+6. **Smart-account wallets.** World App wallets are Safes, so a plain `personal_sign` check fails; we added ERC-1271 / Safe `checkSignatures` verification on World Chain to sign hunters in.
 
 ## Missing capability / documentation
 - One page that lists every credential identifier a v4 result can carry, and which presets produce which.
