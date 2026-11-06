@@ -34,6 +34,32 @@ const START_BUFFER_S = 30;
 /** A hunt must stay open at least this long once it opens, or nobody can finish it. */
 const MIN_RUN_S = 10 * 60;
 
+/**
+ * Funding is three wallet transactions plus a backend check. What already happened on chain is
+ * remembered per hunt, so pressing Fund again after a failure picks up where it stopped instead of
+ * creating and funding a second escrow hunt (whose money the app could not reach).
+ */
+interface FundProgress {
+  contractHuntId?: string; // escrow hunt created
+  fundHash?: string; // escrow funded; only the backend check is left
+}
+const progressKey = (huntId: string) => `trivvo.fund.${huntId}`;
+const loadProgress = (huntId: string): FundProgress => {
+  try {
+    return JSON.parse(localStorage.getItem(progressKey(huntId)) || '{}');
+  } catch {
+    return {};
+  }
+};
+const saveProgress = (huntId: string, p: FundProgress | null) => {
+  try {
+    if (p) localStorage.setItem(progressKey(huntId), JSON.stringify(p));
+    else localStorage.removeItem(progressKey(huntId));
+  } catch {
+    /* storage blocked: retry falls back to a fresh run */
+  }
+};
+
 /** Wallet errors are long; keep the first line, and say plainly when the user said no. */
 const walletError = (err: unknown) => {
   const e = err as { shortMessage?: string; message?: string; response?: { data?: { error?: string } } } | null;
@@ -97,8 +123,24 @@ export default function FundHuntPage() {
 
     if (OFFLINE) return simulate();
 
-    if (!hunt) return setError('We could not load that hunt.');
+    if (!hunt || !id) return setError('We could not load that hunt.');
     if (!address) return setError('Connect your wallet first.');
+    if (hunt.contract_hunt_id != null) return setError('This hunt is already funded.');
+
+    const saved = loadProgress(id);
+    // Everything moved on chain last time; only the backend check failed. Just repeat that.
+    if (saved.fundHash) {
+      try {
+        setStep('funding');
+        await fundHunt({ huntId: id, txHash: saved.fundHash });
+        saveProgress(id, null);
+        setStep('done');
+      } catch (err: unknown) {
+        setError(walletError(err));
+        setStep('input');
+      }
+      return;
+    }
 
     const perHunterNum = Number(hunt.arrival_reward) + Number(hunt.main_reward);
     if (amountNum < perHunterNum) return setError(`Stake at least ${perHunterNum} USDC so one hunter can finish.`);
@@ -111,7 +153,7 @@ export default function FundHuntPage() {
     const huntStartS = Math.floor(new Date(hunt.start_time).getTime() / 1000) || 0;
     // The end time is the vendor's own choice: never stretch it silently, just refuse a window that is too short.
     const end = Math.floor(new Date(hunt.end_time).getTime() / 1000) || 0;
-    if (end - Math.max(huntStartS, Math.floor(Date.now() / 1000) + START_BUFFER_S) < MIN_RUN_S) {
+    if (!saved.contractHuntId && end - Math.max(huntStartS, Math.floor(Date.now() / 1000) + START_BUFFER_S) < MIN_RUN_S) {
       return setError('This hunt would close less than 10 minutes after it opens. Create it again with a later end time.');
     }
     const chainId = APP_CHAIN.id;
@@ -123,18 +165,23 @@ export default function FundHuntPage() {
       // (or anything above) doesn't eat into the buffer.
       const start = Math.max(huntStartS, Math.floor(Date.now() / 1000) + START_BUFFER_S);
 
-      setStep('creating');
-      const createHash = await writeContract(config, {
-        chainId,
-        address: escrow,
-        abi: HUNT_ESCROW_ABI,
-        functionName: 'createHunt',
-        args: [usdc, parseUnits(String(hunt.arrival_reward), 6), parseUnits(String(hunt.main_reward), 6), BigInt(start), BigInt(end)],
-      });
-      const created = await waitForTransactionReceipt(config, { chainId, hash: createHash });
-      const [log] = parseEventLogs({ abi: HUNT_ESCROW_ABI, eventName: 'HuntCreated', logs: created.logs });
-      if (!log) throw new Error('The hunt was not created on chain.');
-      const contractHuntId = log.args.huntId;
+      // Reuse the escrow hunt from an earlier attempt, if one was already created.
+      let contractHuntId = saved.contractHuntId != null ? BigInt(saved.contractHuntId) : undefined;
+      if (contractHuntId === undefined) {
+        setStep('creating');
+        const createHash = await writeContract(config, {
+          chainId,
+          address: escrow,
+          abi: HUNT_ESCROW_ABI,
+          functionName: 'createHunt',
+          args: [usdc, parseUnits(String(hunt.arrival_reward), 6), parseUnits(String(hunt.main_reward), 6), BigInt(start), BigInt(end)],
+        });
+        const created = await waitForTransactionReceipt(config, { chainId, hash: createHash });
+        const [log] = parseEventLogs({ abi: HUNT_ESCROW_ABI, eventName: 'HuntCreated', logs: created.logs });
+        if (!log) throw new Error('The hunt was not created on chain.');
+        contractHuntId = log.args.huntId;
+        saveProgress(id, { contractHuntId: contractHuntId.toString() });
+      }
 
       setStep('approving');
       const approveHash = await writeContract(config, {
@@ -155,9 +202,11 @@ export default function FundHuntPage() {
         args: [contractHuntId, value],
       });
       await waitForTransactionReceipt(config, { chainId, hash: fundHash });
+      saveProgress(id, { contractHuntId: contractHuntId.toString(), fundHash });
 
       // The backend reads this transaction from the chain before the hunt goes live.
       await fundHunt({ huntId: id, txHash: fundHash });
+      saveProgress(id, null);
       setStep('done');
     } catch (err: unknown) {
       setError(walletError(err));
