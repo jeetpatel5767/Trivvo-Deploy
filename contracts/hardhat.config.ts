@@ -18,7 +18,13 @@ const config: HardhatUserConfig = {
             url: "http://127.0.0.1:8545",
             chainId: 31337,
         },
-        // Avalanche Fuji testnet
+        // World Chain Sepolia (D8: escrow + Circle test USDC live here)
+        worldchainSepolia: {
+            url: process.env.WORLDCHAIN_RPC_URL || "https://worldchain-sepolia.g.alchemy.com/public",
+            chainId: 4801,
+            accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+        },
+        // Avalanche Fuji testnet (pre-hackathon)
         fuji: {
             url: "https://api.avax-test.network/ext/bc/C/rpc",
             chainId: 43113,

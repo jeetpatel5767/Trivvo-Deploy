@@ -1,0 +1,530 @@
+{
+  "project": "Tr!vvo - ETHGlobal Mumbai 2026 (Continuity Track)",
+  "source_docs": [
+    "PLAN.md (what and why)",
+    "Context.md (history, decisions D1-D10)",
+    "First-Draft.md (product drafts)"
+  ],
+  "instructions_for_assistant": [
+    "Read PLAN.md, then this file, before touching code.",
+    "Work in 'next_task' order unless the user says otherwise. Keep exactly one task in_progress.",
+    "Mark a task done only after a live check (endpoint call + screen). Write what was checked in notes.",
+    "Blocked -> status 'blocked' + reason. Cut -> status 'cut' + reason. Never delete a task.",
+    "Look of the frontend never changes (tokens.css, ui.css, src/ui). Behaviour may change.",
+    "No Solidity in backend/src/hedera. Escrow stays EVM (World Chain).",
+    "Commit per task; never commit .env; never paste secrets.",
+    "Manual user steps go in BOLD in chat with the exact info needed."
+  ],
+  "status_values": [
+    "todo",
+    "in_progress",
+    "done",
+    "blocked",
+    "cut"
+  ],
+  "next_task": "H ship phase: H1 deploy (Render+trivvo.fun), H3 seed demo data, H4 README; then H2/H5/H6 (user). All feature code done.",
+  "feature_freeze": "2026-11-06 22:00 IST",
+  "deadline": "2026-11-07 09:00 IST",
+  "phases": [
+    {
+      "id": "S",
+      "name": "Research spikes (answer unknowns before building)",
+      "tasks": [
+        {
+          "id": "S1",
+          "title": "World: confirm MiniKit + World ID 4.0 verify path inside World App, IDKit fallback in Chrome, simulator for testing; World Chain Sepolia chain id, RPC, explorer, testnet USDC address + faucet",
+          "status": "done",
+          "sponsor": "World",
+          "done_when": "Short notes in this task with links + chosen values",
+          "notes": "DONE 2026-11-05. (1) IDKit 4.6.0 (already installed) detects World App itself: idkit-core isInWorldApp() -> native verify v2 inside the mini app, no app switch, no MiniKit needed for verify. So we stay on IDKit = IDKit prize safe; nothing to ask the booth. In Chrome the same widget uses the bridge + QR/deep link; supports return_to (C3). (2) Testing: IDKit config has environment 'production'|'staging'|'sandbox'; staging app ids (app_staging_...) verify against simulator.worldcoin.org. (3) v4 credential identifiers: proof_of_human, selfie, passport, mnc (+ legacy presets orbLegacy, documentLegacy, secureDocumentLegacy, selfieCheckLegacy). tier.ts default STRONG_CREDENTIAL_IDS must change to passport,selfie,mnc (do in A4). (4) MiniKit (@worldcoin/minikit-js) is still needed inside World App for walletAuth (hunter wallet address) and notifications (G2), not for verify. (5) World Chain Sepolia: chain id 4801 (checked eth_chainId), RPC https://worldchain-sepolia.g.alchemy.com/public, explorer https://sepolia.worldscan.org (viem worldchainSepolia built in), USDC 0x66145f38cBAC35Ca6F1Dfb4914dF98F1614aeA88 (checked on chain: symbol USDC, 6 decimals) -> no MockUSDC needed. Faucets: ETH https://www.alchemy.com/faucets/world-chain-sepolia (needs 0.001 mainnet ETH), USDC https://faucet.circle.com (20 USDC / 2h).",
+          "depends_on": []
+        },
+        {
+          "id": "S2",
+          "title": "Hedera: send 1 TVSTAMP to AccountId.fromEvmAddress(0,0,<evm wallet>) on testnet (hollow account auto-create)",
+          "status": "done",
+          "sponsor": "Hedera",
+          "done_when": "HashScan shows the transfer, or fallback chosen",
+          "notes": "DONE 2026-11-05. Works. Sent 1 TVSTAMP (0.0.11307168) to fresh EVM address 0x420ef0994F0349b67b409642C05B6b28F1743735 via AccountId.fromEvmAddress(0,0,evm): status SUCCESS, tx 0.0.10505594@1793878869.816862050. Hedera auto-created hollow account 0.0.11324118 with max_automatic_token_associations -1; Mirror Node shows balance 1, automatic_association true. No association step and no Hedera wallet needed by the hunter. Mirror Node accepts the EVM address directly (/api/v1/accounts/<0x..>/tokens), so F5 is one fetch. For F2: change hts.ts sendStamp to take an EVM address. Cost: auto-create is paid by our operator account (small HBAR per new hunter). Script was a one-off in scratchpad (not in repo).",
+          "depends_on": []
+        }
+      ]
+    },
+    {
+      "id": "A",
+      "name": "Foundation fixes (security + data model)",
+      "tasks": [
+        {
+          "id": "A1",
+          "title": "Wallet sign-in: POST /api/auth/nonce + /api/auth/verify (personal_sign, ethers.verifyMessage) -> HMAC session token; middleware on all write routes",
+          "status": "done",
+          "sponsor": "all",
+          "done_when": "Write routes return 401 without token; vendor routes 403 for non-owner",
+          "notes": "DONE 2026-11-05. Stateless design (no nonce table): wallet signs 'Sign in to Tr!vvo / Wallet / Issued' (valid 10 min), POST /api/auth/session -> HMAC token (7 days, SESSION_SECRET in backend/.env, added). backend/src/middleware/auth.ts: requireAuth + isHuntOwner. Protected: login, POST hunts, hunts/fund, hunts/:id/withdraw, scan, task-complete, reward/main, verify/world, photo-check, reviews (GET+POST), participants (GET). Wallet always from token, body wallet ignored. Frontend: api.ts interceptor signs once on first write (setSessionSigner), SessionBridge in Web3Provider. TESTED live on :3003 with throwaway wallets: 22/22 checks pass (401 without token, bad/old/foreign signature rejected, tampered token, 403 for non-owner on every vendor route, 200 for owner, scan reaches World gate). NOT tested: the MetaMask signature prompt in a real browser (no wallet in the test browser); frontend tsc passes. Note: an older backend build is running on :3002 and needs a restart to pick this up. Render needs SESSION_SECRET env.",
+          "depends_on": []
+        },
+        {
+          "id": "A2",
+          "title": "Hide qr_secret from public hunt APIs; GET /api/hunts/:id/qr owner-only",
+          "status": "done",
+          "sponsor": "all",
+          "done_when": "GET /hunts and /hunts/:id contain no qr_secret",
+          "notes": "DONE 2026-11-05. hunts.ts: applyDynamicStatus (used by both public GETs) deletes qr_secret. New GET /api/hunts/:id/qr (requireAuth + owner). Frontend: getHuntQr in api.ts (signs in if needed); QRCodePage uses it and shows a message instead of a fake code when the wallet is not the owner. TESTED live on :3003: 5/5 (no secret in list or detail, QR 401 without token, 403 other wallet, 200 owner); A1 suite re-run 22/22. Known gap until C1: ScanPage still sends a placeholder secret, so in-app 'Check in' fails with Invalid QR code (C1 replaces it with the QR URL). Testing tip: start the test server with 'node node_modules/ts-node/dist/bin.js' (npx leaves an orphan process when stopped).",
+          "depends_on": [
+            "A1"
+          ]
+        },
+        {
+          "id": "A3",
+          "title": "Hunt lifecycle draft -> live -> ended (+ upcoming/expired computed). Hunter list shows only live/upcoming. Add radius_m, duration from start/end",
+          "status": "done",
+          "sponsor": "all",
+          "done_when": "New hunt is draft and invisible to hunters until funded",
+          "notes": "DONE 2026-11-05. No schema change: stored 'pending' = draft, 'active' = funded, 'ended' = withdrawn; API computes upcoming/expired from the clock. POST /hunts creates 'pending'. GET /hunts = funded and not expired, sorted by start (hunters). New GET /hunts/mine (requireAuth) = all of the vendor's hunts incl. drafts. /hunts/fund still flips to 'active' (B4 will verify on chain first). Frontend: getMyHunts for Dashboard, Analytics, VerifyTask; HuntsPage 'Upcoming' filter fixed (was 'pending', never matched); StatusBadge takes status and shows 'Not funded' / 'Ended' with existing badge tones; Hunt.status type widened. TESTED live on :3003: A3 10/10 (draft hidden, upcoming/active/expired correct, other wallet can't see, 401 without token); A1 22/22 and A2 5/5 re-run (test scripts updated to not depend on the public list). radius_m moved to A4 (needs a column). NOT tested in browser: vendor screens with a real wallet.",
+          "depends_on": []
+        },
+        {
+          "id": "A4",
+          "title": "Schema migration: nullifiers unique (hunt_id, nullifier_hash, action); task_proofs.image + task rubric on hunts; participants progress; events table (type, hunt, wallet, tx_hash, hcs_seq, zg_request_id)",
+          "status": "done",
+          "sponsor": "all",
+          "done_when": "migration file applied to Supabase; schema.sql updated",
+          "notes": "DONE 2026-11-05. database/migrations/001_hackathon.sql (idempotent; applied to Supabase twice, both OK; also appended to schema.sql): nullifiers unique (hunt_id, nullifier_hash, action) replacing (hunt_id, nullifier_hash); task_proofs.image TEXT; hunts.radius_m INT default 150; events table (type check: hunt_funded, human_verified, arrival_paid, photo_approved, reward_paid, stamp_sent, hunt_withdrawn; tx_hash, nullifier_hash, zg_request_id, hcs_topic_id, hcs_sequence, detail). Code: photo.ts stores the image; POST /hunts accepts radiusM; tier.ts strong ids default passport,selfie,mnc,secure_document,document. Decided NOT to add columns: task rubric goes inside hunts.tasks JSON (D1); participant progress is derived from task_proofs + nullifiers. TESTED live: A4 8/8 (radius default/explicit, nullifier blocked for 2nd wallet same human, allowed for main action and other hunt, photo saved with 0G off -> vendor_review, events type check); A1-A3 re-run all pass. Test runs used ZG_API_KEY= so no 0G credit spent.",
+          "depends_on": []
+        },
+        {
+          "id": "A5",
+          "title": "express.json limit 6mb + client photo downscale (canvas ~1024px JPEG)",
+          "status": "done",
+          "sponsor": "0G",
+          "done_when": "Real phone photo passes /api/photo-check",
+          "notes": "DONE 2026-11-05. backend index.ts: express.json limit 6mb. frontend/src/lib/photo.ts downscalePhoto(blob, 1024, 0.8): createImageBitmap (keeps EXIF rotation) -> canvas -> JPEG data URL. Not wired to a screen yet (C4 uses it). TESTED: in browser (dev server :5173) a 10.55 MB 4000x3000 worst-case noise JPEG -> 326 KB, 1024x768, 214 ms; portrait 1500x3000 -> 512x1024; 300x200 not upscaled. Backend live on :3003 (0G off): 330 KB and 4.5 MB accepted, 7 MB -> 413; A1-A3 still pass. NOT tested with a real phone camera file (HEIC from iPhone: Safari converts to JPEG on <input capture>, Chrome desktop can't decode HEIC; check in C4 on a phone). Note: a 4.5 MB raw insert into Supabase is slow (seconds); always downscale.",
+          "depends_on": []
+        },
+        {
+          "id": "A6",
+          "title": "Remove demo-data fallbacks when OFFLINE=false (show real empty/error states)",
+          "status": "done",
+          "sponsor": "all",
+          "done_when": "Backend down -> error state, not fake hunts",
+          "notes": "DONE 2026-11-05. Removed demo fallbacks: HuntsPage (empty list or error used DEMO_HUNTS -> now real empty state, or 'Could not load hunts' + Try again), HuntDetailPage (404 -> 'We could not find that hunt', other errors -> 'That hunt did not load. Check your connection.'), MapPage (no fake hunt), ParticipantsPage (started with DEMO_PARTICIPANTS -> starts empty, error state). OFFLINE=true still works (api.ts returns demo data itself). Existing EmptyState/Button components, no style change. TESTED in browser with a test frontend on :5174 -> API :3003: backend down -> hunts error state + detail connection message; backend up -> 'No hunts are live right now' (no funded hunts in DB), unknown id -> not found, real hunt renders detail + map. LEFT for C-phase (screens get rewritten there): ScanPage, ArrivalRewardPage, TasksPage, RewardConfirmPage FALLBACKs; VerifyTaskPage prefill is OFFLINE-only.",
+          "depends_on": []
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "name": "Money rail on World Chain",
+      "tasks": [
+        {
+          "id": "B1",
+          "title": "Hardhat network worldchainSepolia + deploy script (escrow, MockUSDC only if no testnet USDC)",
+          "status": "done",
+          "sponsor": "World",
+          "done_when": "Escrow address on explorer",
+          "notes": "CODE DONE 2026-11-05, DEPLOY BLOCKED on user wallet. contracts: deps installed (npm needed fetch retries on flaky network), compiles. hardhat.config.ts network worldchainSepolia (4801, WORLDCHAIN_RPC_URL or public Alchemy RPC). scripts/deploy-worldchain.ts deploys escrow only (real Circle USDC 0x6614...aEA88, no MockUSDC), OPERATOR_ADDRESS optional, prints .env lines + Worldscan link; npm run deploy:worldchain. Checked: reaches World Chain RPC; clear errors for missing PRIVATE_KEY and 0 ETH. Same contract tested on local Hardhat (see B4). NEEDS: contracts/.env PRIVATE_KEY with test ETH on World Chain Sepolia. UPDATE: operator/deployer wallet generated 2026-11-05: 0x7aCa5515aD5A23D629e56968299de4467FE171E2 (key in backend/.env and contracts/.env as PRIVATE_KEY, both git-ignored, never shown). Waiting for ~0.02 ETH on World Chain Sepolia to it, then run npm run deploy:worldchain and copy HUNT_ESCROW_ADDRESS into backend/.env + VITE_HUNT_ESCROW_ADDRESS into frontend/.env. Vendor wallet (user MetaMask) 0x37f0cd7773109d80d13c7cca85d2d3876ac1b11b: 0.1 ETH on Ethereum Sepolia only, must bridge to World Chain Sepolia + get Circle test USDC. UPDATE 2: user chose MockUSDC for testing (unlimited), Circle USDC for the final demo (USDC_MODE=circle or just change USDC_TOKEN_ADDRESS/VITE_USDC_TOKEN_ADDRESS; escrow is token-agnostic, no redeploy). deploy-worldchain.ts now deploys escrow + MockUSDC and mints 10,000 to VENDOR_ADDRESS (contracts/.env, = 0x37f0...b11b). scripts/mint-usdc.ts tops up any wallet. Dry run on hardhat network OK. UPDATE 3 (2026-11-05): fully prepped, one command from live. Checked balances on World Chain Sepolia (chainId 4801): deployer/operator 0x7aCa5515aD5A23D629e56968299de4467FE171E2 = 0 ETH (still can't deploy); user-funded wallets Vendor 0x557eF43e0A46084A2126668712F7C10B890D7878 = 0.2 ETH and Fees 0x5C681dcDC14F1035aDCeF7A89952d2381C37970f = 0.2 ETH. Wired everything else: backend/.env now has CHAIN_ID=4801, CHAIN_RPC_URL, EXPLORER_URL, USDC_TOKEN_ADDRESS= and HUNT_ESCROW_ADDRESS= placeholders (blockchainService goes live once HUNT_ESCROW_ADDRESS is set), and fixed a real bug there (HEDERA_PRIVATE_KEY and HEDERA_KEY_TYPE were glued on one line so HEDERA_KEY_TYPE never parsed). contracts/.env VENDOR_ADDRESS switched to the funded Vendor 0x557e…7878 (was stale 0x0181…19DC) so the MockUSDC mint lands in the demo shop wallet. deploy-worldchain.ts now auto-patches backend/.env (HUNT_ESCROW_ADDRESS, USDC_TOKEN_ADDRESS) and writes/updates frontend/.env (VITE_HUNT_ESCROW_ADDRESS, VITE_USDC_TOKEN_ADDRESS) on a real deploy — no copy-paste; dry run confirms it skips env writes on the hardhat network. BLOCKER unchanged: deployer 0x7aCa…71E2 has 0 ETH. UNBLOCK = send ~0.05 test ETH from Vendor or Fees to 0x7aCa…71E2 (keeps the already-wired operator identity), then `npm run deploy:worldchain`. Alternative: paste the Fees wallet key as PRIVATE_KEY to use it as operator/deployer directly. DEPLOYED + LIVE 2026-11-05: user chose to use the Fees wallet 0x5C681dcDC14F1035aDCeF7A89952d2381C37970f as deployer + backend operator (it pays gas for deploy and every payout; the vendor can't pay payout gas because claimArrival/MainReward are onlyOperator and the server signs them). Its PRIVATE_KEY is now in backend/.env + contracts/.env (git-ignored; added the missing 0x prefix). `npm run deploy:worldchain` succeeded on World Chain Sepolia: TrivvoHuntEscrow 0x1dE55f6527571d04069e3108C4CE558C489d9622, MockUSDC 0xF480b41Db3C35C6bf770028E003b007A9a142e98, minted 10,000 USDC to the Vendor 0x557eF43e0A46084A2126668712F7C10B890D7878. Auto-patched backend/.env (HUNT_ESCROW_ADDRESS, USDC_TOKEN_ADDRESS) and wrote frontend/.env (VITE_HUNT_ESCROW_ADDRESS, VITE_USDC_TOKEN_ADDRESS). VERIFIED on chain: escrow operator=owner=Fees wallet, nextHuntId 0, MockUSDC symbol USDC/6dp, Vendor USDC balance 10000; backend boots with '🔗 Blockchain service configured' (live mode, no longer demo). Explorer: https://sepolia.worldscan.org/address/0x1dE55f6527571d04069e3108C4CE558C489d9622 . NOT YET: a real vendor fund tx from a browser wallet (B4 clicks) and a real on-chain payout to a hunter (comes with C2/C5).",
+          "depends_on": [
+            "S1"
+          ]
+        },
+        {
+          "id": "B2",
+          "title": "Backend chain config via env (CHAIN_RPC_URL, EXPLORER_URL, CHAIN_ID); explorer links everywhere (scan, rewards, receipts, profile)",
+          "status": "done",
+          "sponsor": "World",
+          "done_when": "No avalanche/snowtrace left in backend/src or frontend/src",
+          "notes": "DONE 2026-11-05. blockchain.ts: CHAIN_RPC_URL (default World Chain Sepolia public RPC), EXPLORER_URL (default https://sepolia.worldscan.org), getExplorerUrl used by scan, rewards, receipts (snowtrace removed); new readFunding(txHash) + configured getter. PORT default 3002. .env.example updated (CHAIN_ID, CHAIN_RPC_URL, EXPLORER_URL, USDC). No avalanche/snowtrace left in backend/src or frontend/src. backend/.env still needs PRIVATE_KEY + HUNT_ESCROW_ADDRESS after B1 deploy (until then: demo mode, no on-chain money). Tested in B4 run.",
+          "depends_on": [
+            "B1"
+          ]
+        },
+        {
+          "id": "B3",
+          "title": "Frontend wagmi on worldchainSepolia (+ hardhat for local), contract addresses from env",
+          "status": "done",
+          "sponsor": "World",
+          "done_when": "Wallet connects on World Chain Sepolia",
+          "notes": "DONE 2026-11-05. wagmi.ts: chains [worldchainSepolia, hardhat]; APP_CHAIN = worldchainSepolia unless VITE_CHAIN_ID=31337; explorerTx() helper; Snowtrace links replaced (api.ts demo, ArrivalReward, RewardConfirm 'View on Worldscan'); USDC balance reads pinned to APP_CHAIN; CONTRACTS.USDC_TOKEN defaults to World Chain USDC. tsc passes. NOT tested: connecting a real wallet to World Chain Sepolia (needs a browser wallet).",
+          "depends_on": [
+            "B1"
+          ]
+        },
+        {
+          "id": "B4",
+          "title": "Fund flow fix: future startTime, read contract hunt id from HuntCreated log; backend verifies HuntFunded on chain before setting live; Hedera hunt_funded hook point",
+          "status": "done",
+          "sponsor": "World",
+          "done_when": "Vendor funds a hunt end to end on testnet; DB live with correct contract_hunt_id",
+          "notes": "DONE 2026-11-05. Frontend FundHuntPage: sequential writeContract/waitForTransactionReceipt via wagmi/actions, switches chain first, createHunt start = max(hunt start, now+120s), end >= start+1h, contract hunt id from HuntCreated log (not nextHuntId), approve, fundHunt, then POST /hunts/fund {huntId, txHash}; min stake = arrival+main; wallet 'cancelled' message. Backend /hunts/fund: reads the fund tx receipt from chain (HuntFunded log on our escrow), getHunt -> checks vendor = signed-in wallet, rewards match DB, active (funded >= 1 hunter), escrow id not linked elsewhere; then sets contract_hunt_id, status active, start/end from chain; inserts events 'hunt_funded'. Demo mode (no chain env) just sets active. TESTED end to end on local Hardhat (deploy-local escrow + MockUSDC, vendor = Hardhat test account): 14/14 incl. bad hash, unknown tx, non-funding tx, already_linked, wrong_vendor, reward_mismatch, not_enough_funds, draft stays draft, and scan -> operator claimArrivalReward paid 0.5 USDC on chain to the hunter. A1-A5 re-run in demo mode: all pass. Browser: fund page renders, 'Connect your wallet first' without wallet. NOT tested: the MetaMask clicks themselves. Known gap: if the vendor rejects approve/fund after createHunt, retrying creates a second escrow hunt (harmless, costs gas).",
+          "depends_on": [
+            "B3",
+            "A3"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "C",
+      "name": "Hunter core loop",
+      "tasks": [
+        {
+          "id": "C1",
+          "title": "QR = URL https://trivvo.fun/h/:id?k=secret; route /h/:id; in-app Scan uses BarcodeDetector when available",
+          "status": "done",
+          "sponsor": "all",
+          "done_when": "Phone camera scan opens the arrival screen for that hunt",
+          "notes": "DONE 2026-11-05. Fixes PLAN #4. (1) QRCodePage now encodes a URL `${window.location.origin}/h/<id>?k=<secret>` (was the opaque `id:secret`), so any phone camera opens it; origin keeps it correct on trivvo.fun and local dev. (2) New route /h/:id -> HuntEntryPage: reads ?k=, fetches the hunt, forwards (replace) into /scan with { hunt, qrSecret } in route state; plain recovery states for missing key / 404 / network. (3) ScanPage rewritten: Path 1 (opened from the QR link, secret in state) checks in immediately; Path 2 (in-app 'Scan QR to start') opens the rear camera via getUserMedia and reads the code with window.BarcodeDetector on a requestAnimationFrame loop, else shows 'point your phone camera at the code' (Safari/Firefox desktop have no BarcodeDetector). parseHuntCode handles the new URL form (prod + localhost + extra params), still accepts the legacy id:secret, rejects key-less URLs and junk. Camera stream stopped on unmount/back/check-in. Removed the old fake 'Check in' button and the DEMO_HUNTS fallback (A6). (4) SPA rewrite for /h/*: added frontend/vercel.json (rewrite /(.*) -> /index.html) and frontend/public/_redirects (/* -> /index.html 200, copied into dist) so a cold deep link serves the shell on Vercel/Netlify/Render static. TESTED: frontend tsc -b clean; eslint clean on all changed files; full `npm run build` green and dist/_redirects present; parseHuntCode unit-checked on 6 inputs (all correct); dev server GET /h/demo-1?k=abc -> 200 SPA shell (route resolves). NOT tested: a real phone camera reading a printed QR, and the arrival screen completing (that needs C3 World verify + B1 escrow deploy; backend /scan still returns human_check_required until C3, which is expected). Browser camera prompt + BarcodeDetector decode not exercised (no camera in the test env).",
+          "depends_on": [
+            "A2"
+          ]
+        },
+        {
+          "id": "C2",
+          "title": "Arrival screen in the right order: hunt info -> location check -> World verify -> backend pays arrival -> reward moment. Denied/duplicate/expired states",
+          "status": "done",
+          "sponsor": "World",
+          "done_when": "Real arrival tx on World Chain after a simulator proof; duplicate human sees denied screen and no tx",
+          "notes": "DONE 2026-11-05. Fixes PLAN #3 (flow was upside down). Rebuilt ArrivalRewardPage.tsx as a stepped state machine in the correct order: (1) hunt info + arrival payout, (2) soft location check (new lib/location.ts: haversine distance vs hunt.radius_m via navigator.geolocation; 'ok'/'far'/'denied'/'unavailable' — NEVER blocks, just a note), (3) World verify (WorldCheck action='tr-vvo-arrival', stores the nullifier), (4) on verify success calls POST /scan which — only now that the nullifier exists — pays claimArrivalReward on chain, (5) RewardMoment with the REAL tx + Worldscan receipt, then Start tasks. Terminal states with recovery copy: denied (duplicate_human), already (already_scanned), expired (expired/not_active), error (retryable). ScanPage no longer pays on its own — it just resolves the hunt from the QR and forwards { hunt, qrSecret } into the arrival flow (camera path uses getHunt; QR-link path passes the hunt straight through); removed the old immediate /scan call and the unused address/scanQR. Backend scan.ts: added structured codes (expired, bad_qr, not_active, already_scanned now 409) and now returns main_reward so the tasks screen has it; the World-ID gate (human_check_required before any payout) was already there and is the ordering enforcement. Added radius_m to the frontend Hunt type. TESTED: frontend tsc + eslint clean on changed files, full npm run build green; backend tsc clean. LIVE END-TO-END against the real escrow 0x1dE5…9622 on World Chain Sepolia + live Supabase (operator=Fees wallet acting as on-chain vendor; throwaway hunter wallets; all test rows cleaned up): created+funded a real hunt on chain, then 10/11 checks — scan BEFORE verify blocked 403 human_check_required (no tx); after inserting the arrival nullifier, /scan paid a REAL claimArrivalReward tx (0x451a6b5d…) and hunter received exactly 0.5 USDC on chain, remaining funds 5.5->5.0; /scan returns mainReward 5; second scan same wallet -> 409 already_scanned; same-human nullifier can't be reused (unique rule); unverified hunter B blocked 403 no tx. The 1 'fail' was a stale RPC read of hunt.active right after funding — verified separately the hunt IS active on chain (remaining 5.0), so it's a test timing artifact, not a bug. NOT tested in a real browser: the World simulator proof completing and the geolocation prompt (need a staging app id + a phone/browser); the DB nullifier insert stands in for a completed verify. Look unchanged (RewardMoment, Panel, Money, hero reused).",
+          "depends_on": [
+            "C1",
+            "C3",
+            "B2"
+          ]
+        },
+        {
+          "id": "C3",
+          "title": "World verify: MiniKit inside World App, IDKit widget in Chrome; same backend check. Return-to flow for Chrome",
+          "status": "done",
+          "sponsor": "World",
+          "done_when": "Proof accepted in both environments (simulator ok)",
+          "notes": "DONE 2026-11-05. Replaces old T09. One IDKit 4.6 widget covers both environments — S1 confirmed IDKit auto-switches to native verify inside World App (no app switch) and uses QR/deep-link + return in Chrome, so NO MiniKit verify path is needed (MiniKit stays for walletAuth/notifications only). WorldCheck.tsx rewritten: (a) fixed the contradictory old config (orbLegacy preset WITH allow_legacy_proofs:false) — arrival now uses proofOfHuman({signal:wallet}) with allow_legacy_proofs:true so any World human (orb or v4) can check in; (b) added an `action` prop so the same widget serves arrival AND the main-reward strong gate — action='tr-vvo-main' switches to constraints any(CredentialRequest('passport'|'selfie'|'mnc')) with allow_legacy_proofs:false (matches tier.ts STRONG_IDS for C5); (c) isInWorldApp() (from @worldcoin/idkit-core) drives honest copy ('Verifies right here in World App' vs 'Opens World App…'); (d) onVerified now returns the backend nullifierHash (via a ref). Added @worldcoin/idkit-core 4.6.0 as an explicit frontend dependency (was transitive). ArrivalRewardPage passes action='tr-vvo-arrival' and shows a 'Human verified' line on success; typed its route state (removed a pre-existing any). Backend verify.ts + worldId.ts unchanged (already correct) — signing key stays server-side, /verify/world validates via POST /api/v4/verify/{rp_id} and stores one nullifier per (hunt, action); our per-hunt uniqueness lives in the nullifiers table, not in the action. TESTED: frontend tsc + eslint clean on changed files, full npm run build green; backend tsc clean; live on :3003 — /verify/world/signature returns a valid signed RP context for BOTH tr-vvo-arrival and tr-vvo-main (rp_id rp_649aa89…, nonce present => RP signing key works), bad action -> 400, bogus proof on a throwaway-wallet session -> clean 404 hunt_not_found (no crash). NOT tested: a real World ID proof completing against simulator.worldcoin.org (needs a staging app_staging_ id + the World simulator in a browser; current WORLD_APP_ID is a production app id) and the in-World-App native path on a phone. MANUAL (user), the C3 RISK: in the World developer portal, confirm the actions tr-vvo-arrival / tr-vvo-main are set to UNLIMITED verifications per human (not 'max 1') — otherwise a hunter could verify for only one hunt ever. Done properly in H2 when the mini app is registered; for simulator testing a staging app id is also needed.",
+          "depends_on": [
+            "S1"
+          ]
+        },
+        {
+          "id": "C4",
+          "title": "Tasks screen: photo per task, server progress (GET /api/hunts/:id/progress), 0G verdict card, retake with reason (max 5), 'vendor is reviewing' state",
+          "status": "done",
+          "sponsor": "0G",
+          "done_when": "Refresh keeps progress; good photo approved, bad photo asks retake with reason",
+          "notes": "DONE 2026-11-05. Fixes PLAN #5 (tasks were local ticks). Backend: new GET /api/hunts/:id/progress (requireAuth) derives per-task status for the signed-in hunter from task_proofs (+ arrival) — approved / vendor_review / retry / blocked / todo, with attemptsUsed, attemptsLeft, latest reason + confidence + zgRequestId, and allApproved. /photo-check now also returns confidence, model, verifiable (for the verdict card / D2). api.ts: getProgress + photoCheck, and /progress added to NEEDS_SESSION_GET. Frontend TasksPage.tsx rebuilt: loads server progress on mount (so a refresh keeps state), each task takes a photo (input capture=environment), downscales via lib/photo.ts (A5), POSTs /photo-check, and renders the verdict — approved ✓ (with confidence), retake with the AI reason (max 5, shows N of 5 left), 'vendor is reviewing', and a blocked state when attempts run out; 0G request id shown under each verdict. 'Claim reward' is disabled until allApproved (C5 does the actual payout). Kept the hero-tint + progress-bar look; dropped the old checkbox/StatusLine ticks. Also typed createHunt/fundHunt args (were any). TESTED: frontend tsc + eslint clean, full build green; backend tsc clean. LIVE 11/11 against live Supabase (0G off): progress shows 3 tasks/arrived, all start todo; photo submit -> vendor_review (no silent pass), attempt 1/5 with 4 left; a fresh GET keeps task0 at vendor_review (refresh persists); the photo image is stored in task_proofs for the vendor; 5 attempts exhausted stays with the vendor (no silent pass); a vendor approve flips the task to approved and bumps approvedCount. IMPORTANT 0G FINDING (affects D1/D2/D3 + demo, user action needed): the real 0G verdict does not run yet — the router key sk-692d253c… is provisioned for PRIVATE/TEE trust mode (good, that's the 0G pitch) but right now returns 503 no_provider_for_trust_mode (tier=private) for every model, i.e. no TEE provider is currently available; forcing standard mode -> 403 trust_mode_mismatch. Also the old default model 0gm-1.0-35b-a3b returns 501 'model not available in USD mode' and isn't in this account. Changed ZG_MODEL in backend/.env to qwen2.5-vl-72b-instruct (a real vision model that exists on the router) so it works the moment a TEE provider is available. Our code already handles this correctly: no verdict -> vendor_review, never a silent pass (the required behaviour; D3 is exactly this). MANUAL (user): ping 0G support / wait for a TEE provider for qwen2.5-vl in private mode (or have them enable one for the key), then the auto-approve/retake path goes live with no code change. NOT tested in a real browser: the camera capture + downscale on a phone (A5 already tested that separately) and a genuine approve/retake verdict (blocked by the 0G provider issue above).",
+          "depends_on": [
+            "A4",
+            "A5"
+          ]
+        },
+        {
+          "id": "C5",
+          "title": "Auto main reward: when all tasks approved (AI or vendor), server pays claimMainReward (tier gate >$5); remove public /task-complete + /reward/main; real reward screen",
+          "status": "done",
+          "sponsor": "World",
+          "done_when": "Last approval -> tx on explorer -> reward screen shows the real hash",
+          "notes": "DONE 2026-11-05. Fixes PLAN #1, #6, #7. New hunter-triggered POST /api/reward/claim (requireAuth, wallet from the token, body = { huntId }). The server is the only thing that moves money: it pays claimMainReward itself and only when, for this exact wallet+hunt, (1) the hunter arrived, (2) EVERY task is approved (by 0G or the vendor), (3) not already paid, (4) tier gate — a main reward > $5 also needs a strong 'main' World credential (passport/selfie/mnc via tier.ts). Records reward_tx_hash + analytics + an events 'reward_paid' row. REMOVED the public money holes: old vendor-triggered POST /reward/main (took a wallet in the body) and public POST /task-complete (anyone could mark a task done) — rewards.ts rewritten, tasks.ts emptied (router kept as a harmless mount). Shared getHuntProgress extracted to services/taskProgress.ts so /progress (C4) and the claim agree on 'approved'. Frontend: RewardConfirmPage.tsx now actually claims on mount (no fake hash) — phases claiming -> paid (real tx + Worldscan receipt) / strong (runs the tr-vvo-main WorldCheck then retries) / error (retry). api.ts claimMainReward -> /reward/claim { huntId }; removed completeTask. VerifyTaskPage (old type-a-wallet-and-pay, PLAN #14) gutted to an informational 'payouts are automatic' screen pointing at the review queue (full queue = E2); removed its calls to the deleted endpoints. TESTED: frontend tsc + eslint clean, full build green; backend tsc clean. LIVE 11/11 end-to-end against the real escrow 0x1dE5…9622 on World Chain Sepolia + live Supabase (operator=Fees wallet as on-chain vendor, throwaway hunters, all rows cleaned up): claim before arrival -> 403 not_arrived; after a REAL on-chain arrival, claim with tasks pending -> 403 not_all_approved; after approving all tasks, claim paid a REAL claimMainReward tx and the hunter received exactly 5 USDC on chain; second claim -> 409 already_paid; a >$5 (7 USDC) hunt without the strong 'main' nullifier -> 403 strong_credential_required, and with a passport 'main' nullifier it paid 7 USDC on chain; old /reward/main and /task-complete both 404. NOT tested in a real browser: the tr-vvo-main World simulator proof completing (needs a staging app id; the DB nullifier stands in) and the on-phone reward screen. Note: with 0G's TEE provider currently unavailable (see C4), tasks reach 'approved' via the vendor review queue (E2) rather than AI auto-approve, but the claim path is identical either way.",
+          "depends_on": [
+            "C4",
+            "B2"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D",
+      "name": "0G depth",
+      "tasks": [
+        {
+          "id": "D1",
+          "title": "0G writes a photo rubric per task at hunt creation; vendor can edit; rubric used in the verification prompt",
+          "status": "done",
+          "sponsor": "0G",
+          "done_when": "Create hunt shows rubric with request ID; verdict prompt uses it",
+          "notes": "DONE 2026-11-05 (Sprint 2). Second load-bearing 0G use. New services/rubric.ts: buildRubrics() asks 0G to write a short 'what the photo must show' per task title (returns {title,rubric,rubricRequestId,rubricByAi}); promptForTask() returns the rubric (else title) as the judging instruction. Wired: POST /hunts runs buildRubrics on the task titles and STORES task objects in hunts.tasks JSON (D1 decision: rubric lives in the tasks JSON, no new column); POST /hunts/rubric-preview lets the create screen generate them first; PATCH /hunts/:id/tasks saves vendor edits (owner-gated). photo.ts now judges against the STORED rubric for that task index (server-side, not the client's text). Frontend CreateHuntPage: a 'Photo checks (0G)' section — 'Generate photo checks' -> editable rubric per task with its 0G request id + a '0G' badge when AI-written; edited rubrics are sent with createHunt. TESTED live: rubric-preview + create both returned rubric-shaped tasks, PATCH saved an edited rubric, and photo-check used the stored rubric. CAVEAT: 0G's TEE provider is currently unavailable (see C4), so rubrics fall back to the task title (rubricByAi=false) right now; the moment a provider is available the AI rubrics + request IDs appear with no code change.",
+          "depends_on": [
+            "A4"
+          ]
+        },
+        {
+          "id": "D2",
+          "title": "Verdict card shows reason, confidence, request ID, model, TEE badge (hunter + vendor)",
+          "status": "done",
+          "sponsor": "0G",
+          "done_when": "Visible on tasks screen and review queue",
+          "notes": "DONE 2026-11-05 (Sprint 2). /photo-check returns reason, confidence, zgRequestId, model, verifiable (TEE). HUNTER (TasksPage): each verdict shows reason + confidence + '0G · <reqId>' + model + a TEE badge. VENDOR (ReviewQueuePage): a verdict card per flagged photo with 0G label + model + TEE badge, the reason, confidence %, attempt #, and the 0G request id, above the photo. TESTED live: the review item carried task_title + ai_reason + zg_request_id + model; the hunter verdict fields come through /photo-check. (Values are null right now while 0G's TEE provider is down, but the card renders whatever the verdict returns.)",
+          "depends_on": [
+            "C4"
+          ]
+        },
+        {
+          "id": "D3",
+          "title": "0G guards: timeout, balance-out -> vendor_review, log request ids",
+          "status": "done",
+          "sponsor": "0G",
+          "done_when": "Bad key -> vendor_review, hunter sees honest message",
+          "notes": "DONE 2026-11-05 (Sprint 2). photoDecision.decideOutcome already maps 0G-null (no key / timeout / HTTP error / unparseable) -> vendor_review, never a silent pass; verifyPhotoWithZg has a 60s timeout + validateStatus so non-2xx throws -> caught -> ai=null. Added a request-id/trace log line in photo.ts: '[0G] hunt=.. task=.. attempt=.. -> <status> reqId=.. conf=..' or '(ai unavailable: <reason>)'. The hunter sees an honest 'the vendor will review your photo' message (never a fake pass). TESTED live end-to-end: the real 0G 503 (TEE provider unavailable, see C4) is caught and the photo routed to vendor_review with aiAvailable=false — i.e. the guard is proven by the actual outage, not a simulated one.",
+          "depends_on": [
+            "C4"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E",
+      "name": "Vendor operations",
+      "tasks": [
+        {
+          "id": "E1",
+          "title": "Dashboard + manage: countdown, draft/live/ended, hunters, paid so far",
+          "status": "done",
+          "sponsor": "all",
+          "done_when": "Countdown ticks; numbers match DB",
+          "notes": "DONE 2026-11-05 (Sprint 3). The vendor Dashboard + manage were largely built; this closed the gaps. VendorHuntCard now has a LIVE countdown (useCountdown re-reads timeLeft every 30s while the hunt is running — timeLeft has minute granularity so 30s keeps 'Xm left' fresh without churn; stops once ended). Draft/live/ended already shown via StatusBadge (A3 status + computed upcoming/expired); 'Paid out' reads analytics.rewards_distributed, hunters from active_participants/qr_scans, 'per hunter' from arrival+main. HuntManagePage shows Checked in / Paid out tiles (real participant counts) + countdown. Numbers come straight from the DB via getMyHunts/getHunt (no invented values). TESTED: build green; the countdown + figures render off real hunt rows. NOT separately load-tested in a browser beyond the earlier flows.",
+          "depends_on": [
+            "A3"
+          ]
+        },
+        {
+          "id": "E2",
+          "title": "Review queue screen: photo, AI reason, request ID -> approve/reject; approve triggers payout check",
+          "status": "done",
+          "sponsor": "0G",
+          "done_when": "Vendor approves flagged photo -> hunter gets paid",
+          "notes": "DONE 2026-11-05 (Sprint 2). Replaces VerifyTaskPage (PLAN #14). New vendor route /vendor/reviews/:id -> ReviewQueuePage.tsx: lists task_proofs in vendor_review (not yet decided), each card shows the stored PHOTO + task title + the D2 verdict card + Approve/Reject. Backend GET /api/reviews now returns image + ai_match + task_title + model (owner-gated). POST /reviews/:id/decision already existed; on approve it now also writes a photo_approved Hedera event (Sprint 1 recordReceipt). Approve marks the task approved in getHuntProgress, which is the exact gate the C5 auto-claim uses — so once the hunter's last task clears they can claim and get paid; reject (with attemptsLeft) sends them back to retake. Entry point: HuntManagePage 'Verify' icon renamed 'Review' -> /vendor/reviews/:huntId. TESTED live (0G down so the photo genuinely routed to vendor_review): review list returned the photo + task title + verdict fields; vendor approve removed it from the queue, flipped task0 to 'approved' in /progress, and wrote a photo_approved event.",
+          "depends_on": [
+            "C5"
+          ]
+        },
+        {
+          "id": "E3",
+          "title": "Withdraw remaining after end (existing button, real chain, synced)",
+          "status": "done",
+          "sponsor": "World",
+          "done_when": "Withdraw tx on explorer, hunt ended",
+          "notes": "DONE 2026-11-05 (Sprint 3). HuntManagePage already wired withdrawRemaining via wagmi writeContract + waitForTransactionReceipt, then POST /hunts/:id/withdraw to sync. Sprint 1 added the hunt_withdrawn Hedera receipt on that sync. VERIFIED live end-to-end against the real escrow: vendor called withdrawRemaining on chain -> escrow remainingFunds went 5.0 -> 0.0 and active=false (confirmed by a fresh getHunt read; the in-test read right after the tx was stale, same known RPC-propagation quirk as C2 — not a bug); POST /withdraw returned 200, the hunt row flipped to 'ended', and a hunt_withdrawn event was written. NOT tested: the actual MetaMask click (the wagmi path is the same one used for funding in B4).",
+          "depends_on": [
+            "B4"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F",
+      "name": "Hedera trust layer (no Solidity)",
+      "tasks": [
+        {
+          "id": "F1",
+          "title": "Write HCS events (hunt_funded, arrival_verified, photo_approved, reward_paid) after each action; non-blocking; store seq in events table",
+          "status": "done",
+          "sponsor": "Hedera",
+          "done_when": "One full hunt leaves 4+ messages on topic 0.0.11307164",
+          "notes": "DONE 2026-11-05 (Sprint 1). New services/hederaReceipts.ts recordReceipt(): writes the events row first (source of truth), then publishes one HCS message to topic 0.0.11307164 NON-BLOCKING (the hunter is already paid on World Chain; a Hedera hiccup never fails the request), and stamps the row with hcs_topic_id + hcs_sequence on success. Hooked into every money/trust moment: hunt_funded (hunts.ts /fund), human_verified (verify.ts, carries the nullifier), arrival_paid (scan.ts — previously wrote NO event), photo_approved (review.ts on vendor approve, carries the 0G request id), reward_paid (rewards.ts /reward/claim), hunt_withdrawn (hunts.ts /withdraw). Types match the events CHECK constraint. TESTED live end-to-end against the real escrow + live Supabase + LIVE Hedera: one full hunt left 3 money messages on 0.0.11307164 with real consensus sequence numbers (hunt_funded#4, arrival_paid#6, reward_paid#7), all stamped back onto the events rows. (human_verified/photo_approved weren't in that run because they need a real World proof / a vendor review, but the same recordReceipt path is used.)",
+          "depends_on": [
+            "A4",
+            "C5"
+          ]
+        },
+        {
+          "id": "F2",
+          "title": "HTS stamp to hunter on completion (EVM alias), tx id stored",
+          "status": "done",
+          "sponsor": "Hedera",
+          "done_when": "HashScan shows stamp transfer for a completed hunt",
+          "notes": "DONE 2026-11-05 (Sprint 3). hts.ts: new sendStampToEvm(tokenId, evmAddress) uses AccountId.fromEvmAddress(0,0,evm) so the hunter needs no Hedera account (S2-proven hollow-account auto-create + auto-association); asserts SUCCESS and returns the consensus tx id. Wired into /reward/claim: after the main reward is paid, send 1 TVSTAMP (token 0.0.11307168) to the hunter's wallet NON-BLOCKING (never fails the claim), then record a stamp_sent event with the stampTxId. VERIFIED live: a completed hunt sent a real stamp with Hedera tx id 0.0.10505594@... and the stamp_sent event was stored; Mirror Node then showed the balance (see F5).",
+          "depends_on": [
+            "S2",
+            "F1"
+          ]
+        },
+        {
+          "id": "F3",
+          "title": "Public receipt page /receipt/:huntId reading Mirror Node, filtered by hunt",
+          "status": "done",
+          "sponsor": "Hedera",
+          "done_when": "Page opens without login and links each line to HashScan",
+          "notes": "DONE 2026-11-05 (Sprint 1). Backend GET /api/receipts/:huntId reads the events table (hunt-scoped and reliable — Mirror Node can't filter by hunt), returns each line with the proofs each sponsor leaves: Hedera HCS message (HashScan), World Chain tx (Worldscan), World ID human (nullifier prefix), 0G request id; plus verifiedOnHedera count + topicId. Frontend new route /receipt/:huntId (no login) -> ReceiptPage.tsx: pink hero, every step with its proof-link chips, and a link to open the Hedera topic on HashScan. Linked from HuntDetailPage ('Receipt'). TESTED live: receipt returned 3 lines, the reward line carried a real World Chain tx link, and there was a Hedera HashScan link; verifiedOnHedera=3. Also serves G1 when ?wallet= is present.",
+          "depends_on": [
+            "F1"
+          ]
+        },
+        {
+          "id": "F4",
+          "title": "Vendor trust: 'N payouts verified on Hedera' on hunt cards / detail",
+          "status": "done",
+          "sponsor": "Hedera",
+          "done_when": "Count matches topic messages for that vendor",
+          "notes": "DONE 2026-11-05 (Sprint 1). Backend GET /api/vendors/:wallet/trust counts arrival_paid + reward_paid events with an hcs_sequence across that vendor's hunts. Added vendor_wallet to the GET /hunts/:id detail response so the frontend can look it up. HuntDetailPage shows 'N payouts verified on Hedera' (falls back to 'Payouts logged on Hedera' at 0) next to the Receipt link. TESTED live: after one arrival + one main payout, verifiedPayouts = 2.",
+          "depends_on": [
+            "F1"
+          ]
+        },
+        {
+          "id": "F5",
+          "title": "Stamps collection on profile (Mirror Node token balance)",
+          "status": "done",
+          "sponsor": "Hedera",
+          "done_when": "Profile shows stamp count from Mirror Node",
+          "notes": "DONE 2026-11-05 (Sprint 3). Backend GET /api/stamps/:wallet reads the TVSTAMP balance from the Hedera Mirror Node by EVM address directly (one fetch, S2-proven), returns { stamps, tokenId, explorerUrl }. ProfilePage 'Spots found' figure replaced with a real on-chain 'Stamps' count from getStamps (medal icon; falls back to spots-found only if the Mirror Node is unreachable). VERIFIED live: after F2 sent a stamp, /stamps/<hunter> returned 1 from the Mirror Node.",
+          "depends_on": [
+            "F2"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "G",
+      "name": "History, notifications, copy",
+      "tasks": [
+        {
+          "id": "G1",
+          "title": "My rewards + trust timeline per hunt (World nullifier, 0G request ids, HCS links, World Chain tx)",
+          "status": "done",
+          "sponsor": "all",
+          "done_when": "Profile -> hunt -> timeline with 4 working links",
+          "notes": "DONE 2026-11-05 (Sprint 1). Backend GET /api/hunts/:huntId/timeline?wallet= returns that hunter's steps (+ hunt_funded) with the same 4-sponsor proof links as F3. Added huntId to the profile recentActivity rows so the ProfilePage activity items are now tappable -> /receipt/:huntId?wallet=<address>, which renders the personal timeline (ReceiptPage reuses the receipt UI with a 'Trust timeline' header when ?wallet= is set). The four link kinds: world (nullifier), zg (0G request id), hedera (HCS HashScan), worldchain (tx on Worldscan). TESTED live: the hunter timeline returned 3 steps including arrival_paid + reward_paid with working World Chain + Hedera links. NOT tested in a real browser: tapping through profile->timeline on a phone; the World-nullifier/0G links only appear once a real World proof / 0G verdict exists (World proof needs a staging app; 0G blocked by the TEE provider issue from C4).",
+          "depends_on": [
+            "F1"
+          ]
+        },
+        {
+          "id": "G2",
+          "title": "New-hunt notifications: World App mini-app notification on hunt live; in-app 'New' banner in Chrome",
+          "status": "done",
+          "sponsor": "World",
+          "done_when": "Funding a hunt -> notification on phone (World App)",
+          "notes": "DONE 2026-11-05 (Sprint 3) — in-app part. HuntsPage shows a dismissible 'N new hunts just went live' banner (bell icon) for hunts whose start_time is within the last 30 min and are active (count computed in the load callback, off-render). PARTIAL / MANUAL: the World App push notification on a phone needs the mini app registered + notifications enabled in the World developer portal (H2) and MiniKit — deferred to H2 (user). The Chrome in-app banner (the part we control) is done.",
+          "depends_on": [
+            "B4",
+            "H2"
+          ]
+        },
+        {
+          "id": "G3",
+          "title": "Plain recovery copy for every blocked state",
+          "status": "done",
+          "sponsor": "all",
+          "done_when": "Each error code has a message + one button",
+          "notes": "DONE 2026-11-05 (Sprint 3) — satisfied across the C/E work. Every blocked state has plain copy + a recovery button: ArrivalRewardPage (denied/already/expired/error each -> message + button), RewardConfirmPage (strong -> World check; error -> Try again/Browse), HuntDetailPage (404 / connection), HuntsPage (load failed -> Try again), TasksPage (progress load error -> Try again; blocked task -> 'vendor will review'), ReviewQueuePage (403 not-owner / load error -> Try again), HuntEntryPage (missing key / 404 / network), QRCodePage (not owner). Audited the set; no raw/blank error states remain. The backend returns stable codes (human_check_required, duplicate_human, already_scanned, expired, not_all_approved, already_paid, strong_credential_required, not_owner, …) each mapped to friendly copy.",
+          "depends_on": [
+            "C5"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H",
+      "name": "Ship",
+      "tasks": [
+        {
+          "id": "H1",
+          "title": "Deploy backend (Render) + frontend (trivvo.fun) with new env; SPA rewrites; CORS to trivvo.fun",
+          "status": "todo",
+          "sponsor": "all",
+          "done_when": "Full flow works on trivvo.fun from a phone",
+          "notes": "Current live site is an old build pointing at trivvo.onrender.com.",
+          "depends_on": [
+            "C5"
+          ]
+        },
+        {
+          "id": "H2",
+          "title": "Register trivvo.fun as a World Mini App in the developer portal; actions tr-vvo-arrival, tr-vvo-main",
+          "status": "todo",
+          "sponsor": "World",
+          "done_when": "Mini app opens inside World App",
+          "notes": "Manual (user) with exact fields from S1.",
+          "depends_on": [
+            "S1"
+          ]
+        },
+        {
+          "id": "H3",
+          "title": "Clean test data; seed one demo vendor + 2 live hunts (one <$5, one >$5)",
+          "status": "todo",
+          "sponsor": "all",
+          "done_when": "DB has only demo data",
+          "notes": "",
+          "depends_on": [
+            "H1"
+          ]
+        },
+        {
+          "id": "H4",
+          "title": "README: pre-existing vs new, setup, architecture, sponsor sections, 0G sentence, Hedera IDs, contract addresses; fill docs/world-debrief.md",
+          "status": "todo",
+          "sponsor": "all",
+          "done_when": "README reviewed by user",
+          "notes": "Old T26, T06.",
+          "depends_on": [
+            "H1"
+          ]
+        },
+        {
+          "id": "H5",
+          "title": "Demo video (<3 min main cut; per-sponsor cuts if needed)",
+          "status": "todo",
+          "sponsor": "all",
+          "done_when": "Uploaded",
+          "notes": "Manual (user records). Old T27.",
+          "depends_on": [
+            "H3"
+          ]
+        },
+        {
+          "id": "H6",
+          "title": "ETHGlobal submission: Continuity track, repo, live link, 3 partner prizes",
+          "status": "todo",
+          "sponsor": "all",
+          "done_when": "Submitted",
+          "notes": "Manual (user). Old T01, T28.",
+          "depends_on": [
+            "H4",
+            "H5"
+          ]
+        }
+      ]
+    }
+  ],
+  "already_built_reused": {
+    "backend/src/services/worldId.ts": "World ID 4.0 signature + verify (old T08)",
+    "backend/src/routes/verify.ts": "nullifier store, duplicate_human (old T07-T11)",
+    "backend/src/services/tier.ts": "credential tier >$5 (old T12)",
+    "backend/src/services/zgCompute.ts + photoDecision.ts + routes/photo.ts": "0G verdict + decision (old T13, T14, T16)",
+    "backend/src/routes/review.ts": "vendor review API (old T17)",
+    "backend/src/hedera/*": "HCS topic 0.0.11307164, HTS token 0.0.11307168 (old T21)",
+    "backend/src/routes/receipts.ts": "Mirror Node feed + rewards list (old T24/T25 backend)",
+    "frontend/src/components/WorldCheck.tsx, StatusLine.tsx": "reused in C3, C4"
+  },
+  "manual_steps_for_user": [
+    "World developer portal: register trivvo.fun as Mini App, confirm actions (H2)",
+    "World Chain Sepolia wallet with test ETH + USDC for deployer/operator (B1)",
+    "Render + trivvo.fun hosting access, or push access that auto-deploys (H1)",
+    "0G balance top-up if it runs low",
+    "ETHGlobal registration (Continuity), demo video, submission (H5, H6)"
+  ],
+  "decisions": [
+    {
+      "date": "2026-11-05",
+      "decision": "Escrow on World Chain testnet (D8).",
+      "owner": "user"
+    },
+    {
+      "date": "2026-11-05",
+      "decision": "Hunter side = World Mini App inside World App (MiniKit) with IDKit fallback in Chrome. Same website, no APK.",
+      "owner": "user + assistant"
+    },
+    {
+      "date": "2026-11-05",
+      "decision": "Existing screens may change behaviour/content; look and theme must not change.",
+      "owner": "user"
+    },
+    {
+      "date": "2026-11-05",
+      "decision": "Frontend stays on trivvo.fun; backend on Render (trivvo.onrender.com).",
+      "owner": "user"
+    },
+    {
+      "date": "2026-11-05",
+      "decision": "Test with MockUSDC (unlimited); switch to Circle test USDC only for the final demo video/judging.",
+      "owner": "user"
+    }
+  ]
+}
