@@ -22,9 +22,10 @@ const taskLabel = (t: unknown, i: number) =>
  *   4. claim arrival    — backend sees the nullifier, pays claimArrivalReward on chain
  *   5. reward moment     — real tx + explorer link, then "Start tasks"
  *
- * The backend enforces the order: /scan returns human_check_required until the World
- * nullifier exists, and 409 duplicate_human / already_scanned for repeat humans — each
- * mapped here to an honest denied/expired/already state. No fake "checked in" moment.
+ * The check-in is tried first: /scan returns human_check_required until the World
+ * nullifier exists (then the World check is shown), already_scanned for a returning
+ * hunter (-> tasks), and /verify/world refuses a second wallet of the same human with
+ * duplicate_human (-> denied). No fake "checked in" moment.
  */
 
 type Phase = 'location' | 'verify' | 'claiming' | 'reward' | 'denied' | 'expired' | 'already' | 'error';
@@ -71,7 +72,9 @@ export default function ArrivalRewardPage() {
     const r = await checkLocation(Number(hunt.location_lat), Number(hunt.location_lng), Number(hunt.radius_m) || 150);
     setLoc(r);
     setLocChecking(false);
-    setPhase('verify');
+    // Try the check-in first: a returning hunter (already verified or already checked in)
+    // goes straight through; the World check is only asked for when the backend needs it.
+    claimArrival();
   };
 
   // Step 4: once World verify stored the nullifier, ask the backend to pay the arrival reward.
@@ -96,13 +99,14 @@ export default function ArrivalRewardPage() {
     } catch (err: unknown) {
       const e = err as { response?: { status?: number; data?: { code?: string; error?: string } } };
       const code = e.response?.data?.code;
-      if (code === 'duplicate_human') setPhase('denied');
+      claimedRef.current = false;
+      if (code === 'human_check_required') setPhase('verify');
+      else if (code === 'duplicate_human') setPhase('denied');
       else if (code === 'already_scanned') setPhase('already');
       else if (code === 'expired' || code === 'not_active') setPhase('expired');
       else {
         setMessage(e.response?.data?.error || 'That did not go through. Try again.');
         setPhase('error');
-        claimedRef.current = false; // allow a retry
       }
     }
   };
@@ -256,6 +260,11 @@ export default function ArrivalRewardPage() {
             walletAddress={address || '0xdemo'}
             action="tr-vvo-arrival"
             onVerified={() => claimArrival()}
+            onRefused={(code, msg) => {
+              if (code === 'duplicate_human') return setPhase('denied');
+              setMessage(msg);
+              setPhase('error');
+            }}
           />
         </section>
       )}
