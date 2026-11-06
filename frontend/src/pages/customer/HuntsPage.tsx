@@ -1,17 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, MapPin, ChevronDown, Check } from 'lucide-react';
+import { Search, MapPin, ChevronDown, Check, X } from 'lucide-react';
 import { getHunts } from '../../lib/api';
-import { DEMO_HUNTS } from '../../lib/demoData';
 import { totalReward, type Hunt } from '../../lib/types';
 import { HuntCard } from '../../components/HuntCard';
 import { TabBar } from '../../components/TabBar';
-import { AppBar, Block, CardSkeleton, Chip, ChipRow, EmptyState, Input, Money, Panel, Sheet } from '../../ui';
+import { AppBar, Block, Button, CardSkeleton, Chip, ChipRow, EmptyState, Input, Money, Panel, Sheet } from '../../ui';
+import { useNow } from '../../lib/time';
 import { Icon } from '../../components/Icon';
 
 const FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'active', label: 'Live' },
-  { key: 'pending', label: 'Upcoming' },
+  { key: 'upcoming', label: 'Upcoming' },
 ] as const;
 
 type FilterKey = (typeof FILTERS)[number]['key'];
@@ -27,15 +27,31 @@ export default function HuntsPage() {
   const [area, setArea] = useState<string>(ALL_AREAS);
   const [areaOpen, setAreaOpen] = useState(false);
 
-  useEffect(() => {
+  const [failed, setFailed] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const now = useNow(30_000);
+
+  /* Real data only: an empty list or a failed call shows as such, never as demo hunts. */
+  const [freshCount, setFreshCount] = useState(0);
+
+  const load = () => {
+    setLoading(true);
+    setFailed(false);
     getHunts()
       .then((res) => {
-        const apiHunts: Hunt[] = res.data.hunts || [];
-        setHunts(apiHunts.length > 0 ? apiHunts : DEMO_HUNTS);
+        const list: Hunt[] = res.data.hunts || [];
+        setHunts(list);
+        // G2: count hunts that went live in the last 30 min (computed off-render, in this callback).
+        const cutoff = Date.now() - 30 * 60_000;
+        setFreshCount(list.filter((h) => h.status === 'active' && new Date(h.start_time).getTime() >= cutoff).length);
       })
-      .catch(() => setHunts(DEMO_HUNTS))
+      .catch(() => setFailed(true))
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  // Initial load on mount; load() kicks off the fetch and manages its own state.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load(); }, []);
 
   /** Areas come from the hunts already loaded — no extra lookup, no invented places. */
   const areas = useMemo(() => {
@@ -52,14 +68,17 @@ export default function HuntsPage() {
         h.business_name?.toLowerCase().includes(q) ||
         h.location_name?.toLowerCase().includes(q);
       const matchArea = area === ALL_AREAS || h.location_name === area;
-      return matchSearch && matchArea && (filter === 'all' || h.status === filter);
+      // The server said "upcoming" when the list loaded; once its start time passes it is live.
+      const status = h.status === 'upcoming' && new Date(h.start_time).getTime() <= now ? 'active' : h.status;
+      return matchSearch && matchArea && (filter === 'all' || status === filter);
     });
-  }, [hunts, search, filter, area]);
+  }, [hunts, search, filter, area, now]);
 
   /** The hero reflects whatever area is selected. */
   const live = useMemo(
-    () => filtered.filter((h) => h.status === 'active'),
-    [filtered]
+    () =>
+      filtered.filter((h) => h.status === 'active' || (h.status === 'upcoming' && new Date(h.start_time).getTime() <= now)),
+    [filtered, now]
   );
   const liveValue = useMemo(() => live.reduce((s, h) => s + totalReward(h), 0), [live]);
 
@@ -163,6 +182,29 @@ export default function HuntsPage() {
           </ChipRow>
         </div>
 
+        {/* G2: "New hunt" banner when something went live recently. */}
+        {freshCount > 0 && !bannerDismissed && (
+          <div className="pad" style={{ marginTop: 16 }}>
+            <div
+              className="row"
+              style={{ gap: 12, background: 'var(--pink-soft)', borderRadius: 'var(--r-lg)', padding: '12px 14px' }}
+            >
+              <Icon name="bell" set="objects" size={22} style={{ flex: 'none' }} />
+              <span className="body-sm grow" style={{ fontWeight: 600 }}>
+                {freshCount === 1 ? 'A new hunt just went live' : `${freshCount} new hunts just went live`}
+              </span>
+              <button
+                type="button"
+                onClick={() => setBannerDismissed(true)}
+                aria-label="Dismiss"
+                style={{ flex: 'none', background: 'none', padding: 4, color: 'var(--ink-subtle)' }}
+              >
+                <X size={16} strokeWidth={2.4} />
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="stack pad" style={{ marginTop: 24 }}>
           {loading ? (
             <>
@@ -170,6 +212,17 @@ export default function HuntsPage() {
               <CardSkeleton />
               <CardSkeleton />
             </>
+          ) : failed ? (
+            <EmptyState
+              icon={<Icon name="compass" set="objects" size={26} />}
+              title="Could not load hunts"
+              body="Check your connection and try again."
+              action={
+                <Button variant="ink" size="md" onClick={load}>
+                  Try again
+                </Button>
+              }
+            />
           ) : filtered.length === 0 ? (
             <EmptyState
               icon={<Icon name="compass" set="objects" size={26} />}

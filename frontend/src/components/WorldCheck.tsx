@@ -1,0 +1,170 @@
+import { useRef, useState } from 'react';
+import {
+  IDKitRequestWidget,
+  proofOfHuman,
+  any,
+  CredentialRequest,
+  type IDKitResult,
+} from '@worldcoin/idkit';
+import { isInWorldApp } from '@worldcoin/idkit-core';
+import { Button, Block, Panel } from '../ui';
+import api from '../lib/api';
+
+/**
+ * C3 — human check with World ID.
+ *
+ * One IDKit widget covers both environments: inside World App it verifies natively
+ * (no app switch); in a desktop/Chrome browser the same widget shows a QR / deep link
+ * and brings the user back. isInWorldApp() is used only to show honest copy — IDKit
+ * handles the mechanics itself (confirmed in S1).
+ *
+ * Two actions:
+ *   - 'tr-vvo-arrival' (default): any unique human. proofOfHuman accepts both the newer
+ *     v4 proof and older orb proofs (allow_legacy_proofs: true), so the widest set of
+ *     World users can check in.
+ *   - 'tr-vvo-main': the stronger-credential gate for rewards over $5 (C5). Requires a
+ *     v4 credential (passport / selfie / mnc), so allow_legacy_proofs is false.
+ *
+ * The signing key never leaves the backend: we fetch the signed RP context, open World,
+ * then post the full proof to /api/verify/world, which validates it and stores one
+ * nullifier per (hunt, action). Our per-hunt uniqueness lives there, not in the action.
+ */
+
+const WORLD_APP_ID =
+  (import.meta.env.VITE_WORLD_APP_ID as `app_${string}`) || 'app_a3038950a55b59d8386cb7bccf8dd633';
+
+type WorldAction = 'tr-vvo-arrival' | 'tr-vvo-main';
+
+interface RpContext {
+  rp_id: string;
+  nonce: string;
+  created_at: number;
+  expires_at: number;
+  signature: string;
+}
+
+export function WorldCheck({
+  huntId,
+  walletAddress,
+  action = 'tr-vvo-arrival',
+  onVerified,
+}: {
+  huntId: string;
+  walletAddress: string;
+  action?: WorldAction;
+  onVerified: (nullifierHash?: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [rpContext, setRpContext] = useState<RpContext | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const strong = action === 'tr-vvo-main';
+  const inWorldApp = isInWorldApp();
+
+  const start = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      const { data } = await api.post('/verify/world/signature', { action });
+      // Backend returns `sig`; the IDKit RpContext field is `signature`.
+      setRpContext({
+        rp_id: data.rp_id,
+        nonce: data.nonce,
+        created_at: data.created_at,
+        expires_at: data.expires_at,
+        signature: data.sig,
+      });
+      setOpen(true);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      setError(msg || 'Could not start the human check. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Carries the backend's nullifier from handleVerify to onSuccess (a ref, not render state).
+  const nullifierRef = useRef<string | undefined>(undefined);
+
+  const send = async (result: IDKitResult): Promise<void> => {
+    const { data } = await api.post('/verify/world', { huntId, walletAddress, action, result });
+    if (!data?.success) throw new Error(data?.error || 'Human check failed');
+    nullifierRef.current = data.nullifierHash as string | undefined;
+  };
+
+  // The proof this action asks for. Arrival: any unique human (legacy proofs allowed).
+  // Main: a stronger v4 credential (passport OR selfie OR mnc), no legacy.
+  const strongConstraints = any(
+    CredentialRequest('passport'),
+    CredentialRequest('selfie'),
+    CredentialRequest('mnc')
+  );
+
+  return (
+    <Panel>
+      <Block>
+        <span className="overline t-subtle">Human check</span>
+        <p className="body-sm t-muted" style={{ marginTop: 8 }}>
+          {strong
+            ? 'This reward needs a stronger World ID credential (passport, selfie or mobile number). One check per hunt.'
+            : 'Prove you are a unique person to collect this reward. One check per hunt.'}
+        </p>
+        <p className="caption t-subtle" style={{ marginTop: 6 }}>
+          {inWorldApp ? 'Verifies right here in World App.' : 'Opens World App to verify, then brings you back.'}
+        </p>
+      </Block>
+      {error && (
+        <Block tight>
+          <p className="caption" style={{ color: 'var(--error)' }}>
+            {error}
+          </p>
+        </Block>
+      )}
+      <Block tight>
+        <Button variant="ink" size="lg" block loading={busy} onClick={start}>
+          Verify with World ID
+        </Button>
+      </Block>
+
+      {rpContext &&
+        (strong ? (
+          <IDKitRequestWidget
+            open={open}
+            onOpenChange={setOpen}
+            app_id={WORLD_APP_ID}
+            action={action}
+            rp_context={rpContext}
+            allow_legacy_proofs={false}
+            constraints={strongConstraints}
+            handleVerify={async (result: IDKitResult) => {
+              await send(result);
+            }}
+            onSuccess={() => {
+              setOpen(false);
+              onVerified(nullifierRef.current);
+            }}
+            onError={(code) => setError(`Human check not completed (${code}). Try again.`)}
+          />
+        ) : (
+          <IDKitRequestWidget
+            open={open}
+            onOpenChange={setOpen}
+            app_id={WORLD_APP_ID}
+            action={action}
+            rp_context={rpContext}
+            allow_legacy_proofs={true}
+            preset={proofOfHuman({ signal: walletAddress })}
+            handleVerify={async (result: IDKitResult) => {
+              await send(result);
+            }}
+            onSuccess={() => {
+              setOpen(false);
+              onVerified(nullifierRef.current);
+            }}
+            onError={(code) => setError(`Human check not completed (${code}). Try again.`)}
+          />
+        ))}
+    </Panel>
+  );
+}

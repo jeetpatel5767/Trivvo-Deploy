@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
-import { parseUnits, formatUnits } from 'viem';
+import { useReadContract } from 'wagmi';
+import { switchChain, waitForTransactionReceipt, writeContract, getChainId } from 'wagmi/actions';
+import { parseUnits, formatUnits, parseEventLogs } from 'viem';
 import { Check } from 'lucide-react';
 import { HUNT_ESCROW_ABI, ERC20_ABI, CONTRACTS } from '../../lib/contracts';
 import { getHunt, fundHunt, OFFLINE } from '../../lib/api';
+import { AddTokenButton } from '../../components/AddTokenButton';
 import { useDemoAccount } from '../../lib/demoAccount';
+import { config, APP_CHAIN } from '../../lib/wagmi';
 import type { Hunt } from '../../lib/types';
 import { AppBar, Block, Button, Field, Money, Panel, SectionLabel, Tiles, UnitInput } from '../../ui';
+import { formatWindow, useNow } from '../../lib/time';
 import { Icon } from '../../components/Icon';
 
 type Step = 'input' | 'creating' | 'approving' | 'funding' | 'done';
@@ -20,7 +24,31 @@ const STEPS: { key: Step; label: string }[] = [
 
 const ORDER: Step[] = ['input', 'creating', 'approving', 'funding', 'done'];
 
-/** Fund hunt — two-step approve + fund. While OFFLINE the steps are simulated, no wallet needed. */
+/**
+ * The contract needs a start time still in the future when createHunt is mined, so the start is
+ * "a moment from now": long enough to confirm the first wallet pop-up, short enough that the hunt is
+ * open about when the three funding steps finish (they take ~10s on chain).
+ */
+const START_BUFFER_S = 30;
+
+/** A hunt must stay open at least this long once it opens, or nobody can finish it. */
+const MIN_RUN_S = 10 * 60;
+
+/** Wallet errors are long; keep the first line, and say plainly when the user said no. */
+const walletError = (err: unknown) => {
+  const e = err as { shortMessage?: string; message?: string; response?: { data?: { error?: string } } } | null;
+  const text = e?.shortMessage || e?.message || '';
+  if (/reject|denied/i.test(text)) return 'You cancelled that in your wallet. Nothing was moved.';
+  // The start-time buffer ran out while the wallet pop-up was open; nothing was funded.
+  if (/start must be in future/i.test(text)) return 'That took a little long to confirm, so the start time passed. Press Fund again and confirm a bit quicker.';
+  return (e?.response?.data?.error || text || 'That transaction did not go through.').split('\n')[0];
+};
+
+/**
+ * Fund hunt — B4: create on chain -> approve USDC -> fund -> backend confirms on chain.
+ * The escrow hunt id is read from the HuntCreated log (no guessing from nextHuntId).
+ * While OFFLINE the steps are simulated, no wallet needed.
+ */
 export default function FundHuntPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -29,72 +57,25 @@ export default function FundHuntPage() {
   const [step, setStep] = useState<Step>('input');
   const [error, setError] = useState('');
   const [hunt, setHunt] = useState<Hunt | null>(null);
-  const [contractHuntId, setContractHuntId] = useState<bigint | null>(null);
+  const now = useNow(30_000);
 
   useEffect(() => {
     if (id) getHunt(id).then((res) => setHunt(res.data.hunt)).catch(() => {});
   }, [id]);
+
+  // The window the hunt will really get if funded right now (same rule as handleFund).
+  const planStartS = hunt ? Math.max(Math.floor(new Date(hunt.start_time).getTime() / 1000) || 0, Math.floor(now / 1000) + START_BUFFER_S) : 0;
+  const planEndS = hunt ? Math.floor(new Date(hunt.end_time).getTime() / 1000) || 0 : 0;
+  const planWindow = hunt ? formatWindow(new Date(planStartS * 1000).toISOString(), new Date(planEndS * 1000).toISOString()) : null;
+  const planTooShort = !!hunt && planEndS - planStartS < MIN_RUN_S;
 
   const { data: usdcBalance } = useReadContract({
     address: CONTRACTS.USDC_TOKEN as `0x${string}`,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
+    chainId: APP_CHAIN.id,
   });
-
-  const { data: nextHuntId } = useReadContract({
-    address: CONTRACTS.HUNT_ESCROW as `0x${string}`,
-    abi: HUNT_ESCROW_ABI,
-    functionName: 'nextHuntId',
-  });
-
-  const { writeContract: createOnChain, data: createTx } = useWriteContract();
-  const { isSuccess: createDone } = useWaitForTransactionReceipt({ hash: createTx });
-
-  const { writeContract: approveUSDC, data: approveTx } = useWriteContract();
-  const { isSuccess: approveDone } = useWaitForTransactionReceipt({ hash: approveTx });
-
-  const { writeContract: fundOnChain, data: fundTx } = useWriteContract();
-  const { isSuccess: fundDone } = useWaitForTransactionReceipt({ hash: fundTx });
-
-  useEffect(() => {
-    if (createDone && step === 'creating') {
-      setStep('approving');
-      approveUSDC({
-        address: CONTRACTS.USDC_TOKEN as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [CONTRACTS.HUNT_ESCROW as `0x${string}`, parseUnits(amount, 6)],
-      });
-    }
-
-  }, [createDone, step]);
-
-  useEffect(() => {
-    if (approveDone && step === 'approving') {
-      setStep('funding');
-      fundOnChain({
-        address: CONTRACTS.HUNT_ESCROW as `0x${string}`,
-        abi: HUNT_ESCROW_ABI,
-        functionName: 'fundHunt',
-        args: [contractHuntId ?? BigInt(0), parseUnits(amount, 6)],
-      });
-    }
-
-  }, [approveDone, step]);
-
-  useEffect(() => {
-    if (fundDone && step === 'funding') {
-      (async () => {
-        try {
-          await fundHunt({ huntId: id, contractHuntId: Number(contractHuntId), txHash: fundTx });
-          setStep('done');
-        } catch {
-          setError('The funds moved, but we could not sync that to your dashboard.');
-        }
-      })();
-    }
-  }, [fundDone, step, id, contractHuntId, fundTx]);
 
   /* placeholder: walks the three steps on timers so the flow is viewable without a wallet. */
   const simulate = async () => {
@@ -105,7 +86,7 @@ export default function FundHuntPage() {
     await wait(900);
     setStep('funding');
     await wait(900);
-    await fundHunt({ huntId: id, contractHuntId: 0, txHash: '0xdemo' }).catch(() => {});
+    await fundHunt({ huntId: id, txHash: '0xdemo' }).catch(() => {});
     setStep('done');
   };
 
@@ -119,33 +100,67 @@ export default function FundHuntPage() {
     if (!hunt) return setError('We could not load that hunt.');
     if (!address) return setError('Connect your wallet first.');
 
+    const perHunterNum = Number(hunt.arrival_reward) + Number(hunt.main_reward);
+    if (amountNum < perHunterNum) return setError(`Stake at least ${perHunterNum} USDC so one hunter can finish.`);
     const bal = usdcBalance ? parseFloat(formatUnits(usdcBalance as bigint, 6)) : 0;
     if (bal < amountNum) return setError(`You have ${bal.toFixed(2)} USDC. Top up or lower the amount.`);
 
-    setContractHuntId((nextHuntId as bigint) || BigInt(0));
-    setStep('creating');
-
-    const now = Math.floor(Date.now() / 1000);
-    const start = hunt.start_time ? Math.floor(new Date(hunt.start_time).getTime() / 1000) : now - 60;
-    const end = hunt.end_time
-      ? Math.max(Math.floor(new Date(hunt.end_time).getTime() / 1000), start + 3600)
-      : start + 30 * 86400;
+    const escrow = CONTRACTS.HUNT_ESCROW as `0x${string}`;
+    const usdc = CONTRACTS.USDC_TOKEN as `0x${string}`;
+    const value = parseUnits(amount, 6);
+    const huntStartS = Math.floor(new Date(hunt.start_time).getTime() / 1000) || 0;
+    // The end time is the vendor's own choice: never stretch it silently, just refuse a window that is too short.
+    const end = Math.floor(new Date(hunt.end_time).getTime() / 1000) || 0;
+    if (end - Math.max(huntStartS, Math.floor(Date.now() / 1000) + START_BUFFER_S) < MIN_RUN_S) {
+      return setError('This hunt would close less than 10 minutes after it opens. Create it again with a later end time.');
+    }
+    const chainId = APP_CHAIN.id;
 
     try {
-      createOnChain({
-        address: CONTRACTS.HUNT_ESCROW as `0x${string}`,
+      if (getChainId(config) !== chainId) await switchChain(config, { chainId });
+
+      // Stamp the start time only now, right before the wallet pop-up, so a network-switch prompt
+      // (or anything above) doesn't eat into the buffer.
+      const start = Math.max(huntStartS, Math.floor(Date.now() / 1000) + START_BUFFER_S);
+
+      setStep('creating');
+      const createHash = await writeContract(config, {
+        chainId,
+        address: escrow,
         abi: HUNT_ESCROW_ABI,
         functionName: 'createHunt',
-        args: [
-          CONTRACTS.USDC_TOKEN as `0x${string}`,
-          parseUnits(String(hunt.arrival_reward || '0.5'), 6),
-          parseUnits(String(hunt.main_reward || '5'), 6),
-          BigInt(start),
-          BigInt(end),
-        ],
+        args: [usdc, parseUnits(String(hunt.arrival_reward), 6), parseUnits(String(hunt.main_reward), 6), BigInt(start), BigInt(end)],
       });
-    } catch (err: any) {
-      setError(err?.message || 'That transaction did not go through.');
+      const created = await waitForTransactionReceipt(config, { chainId, hash: createHash });
+      const [log] = parseEventLogs({ abi: HUNT_ESCROW_ABI, eventName: 'HuntCreated', logs: created.logs });
+      if (!log) throw new Error('The hunt was not created on chain.');
+      const contractHuntId = log.args.huntId;
+
+      setStep('approving');
+      const approveHash = await writeContract(config, {
+        chainId,
+        address: usdc,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [escrow, value],
+      });
+      await waitForTransactionReceipt(config, { chainId, hash: approveHash });
+
+      setStep('funding');
+      const fundHash = await writeContract(config, {
+        chainId,
+        address: escrow,
+        abi: HUNT_ESCROW_ABI,
+        functionName: 'fundHunt',
+        args: [contractHuntId, value],
+      });
+      await waitForTransactionReceipt(config, { chainId, hash: fundHash });
+
+      // The backend reads this transaction from the chain before the hunt goes live.
+      await fundHunt({ huntId: id, txHash: fundHash });
+      setStep('done');
+    } catch (err: unknown) {
+      setError(walletError(err));
       setStep('input');
     }
   };
@@ -210,7 +225,27 @@ export default function FundHuntPage() {
             { label: 'Your balance', value: balance },
           ]}
         />
+        <Block tight>
+          <AddTokenButton />
+        </Block>
       </Panel>
+
+      {planWindow && (
+        <Panel style={{ marginTop: 14 }}>
+          <Block>
+            <span className="overline t-subtle">When it runs</span>
+            <p className="body-sm" style={{ marginTop: 8, fontWeight: 600 }}>{planWindow}</p>
+            <p className="caption t-subtle" style={{ marginTop: 6 }}>
+              It opens about 30 seconds after you press Fund, because the contract needs a start time in the future.
+            </p>
+            {planTooShort && (
+              <p className="caption" style={{ marginTop: 8, color: 'var(--error)' }}>
+                That window is under 10 minutes, so it can&apos;t be funded. Create the hunt again with a later end time.
+              </p>
+            )}
+          </Block>
+        </Panel>
+      )}
 
       <section style={{ marginTop: 28 }}>
         <SectionLabel icon={<Icon name="coins" set="objects" size={16} />}>Amount to stake</SectionLabel>

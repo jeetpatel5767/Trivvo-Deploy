@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getHunts } from '../../lib/api';
+import { getMyHunts } from '../../lib/api';
 import { totalReward, type Hunt } from '../../lib/types';
 import { VendorSidebar } from '../../components/VendorSidebar';
 import { AppBar, Block, CardSkeleton, EmptyState, Money, Panel, SectionLabel, Tiles } from '../../ui';
@@ -13,7 +13,7 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getHunts()
+    getMyHunts()
       .then((res) => setHunts(res.data.hunts || []))
       .catch(() => setHunts([]))
       .finally(() => setLoading(false));

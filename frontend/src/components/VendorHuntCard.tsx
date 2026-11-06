@@ -1,8 +1,19 @@
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
 import { Block, IconStrip, Money, Panel, StatusBadge, timeLeft } from '../ui';
+import { formatWindow, startsIn, useNow } from '../lib/time';
 import { totalReward, type Hunt } from '../lib/types';
 import { Icon, huntIconName } from './Icon';
+
+/**
+ * E1: the card's clock. Until the hunt opens it says "Starts in 2m" (hunters see Upcoming
+ * during that time, so the vendor must see the same story); after that, the time left.
+ * Re-reads the clock every 30s, which matches the minute granularity of the text.
+ */
+function useHuntClock(hunt: Hunt): string | null {
+  useNow(30_000);
+  return startsIn(hunt.start_time) ?? timeLeft(hunt.end_time);
+}
 
 /**
  * Vendor hunt card.
@@ -19,7 +30,8 @@ import { Icon, huntIconName } from './Icon';
  */
 export function VendorHuntCard({ hunt }: { hunt: Hunt }) {
   const navigate = useNavigate();
-  const remaining = timeLeft(hunt.end_time);
+  const remaining = useHuntClock(hunt);
+  const runWindow = formatWindow(hunt.start_time, hunt.end_time);
 
   const views = Number(hunt.views ?? 0);
   const scans = Number(hunt.qr_scans ?? 0);
@@ -57,7 +69,7 @@ export function VendorHuntCard({ hunt }: { hunt: Hunt }) {
 
           <div className="grow" style={{ minWidth: 0 }}>
             <div className="row-between">
-              <StatusBadge startsAt={hunt.start_time} endsAt={hunt.end_time} />
+              <StatusBadge startsAt={hunt.start_time} endsAt={hunt.end_time} status={hunt.status} />
               {remaining && <span className="caption t-subtle">{remaining}</span>}
             </div>
             <h3
@@ -71,6 +83,11 @@ export function VendorHuntCard({ hunt }: { hunt: Hunt }) {
             >
               {hunt.title}
             </h3>
+            {runWindow && (
+              <p className="caption t-subtle" style={{ marginTop: 6 }}>
+                {runWindow}
+              </p>
+            )}
           </div>
         </div>
       </Block>

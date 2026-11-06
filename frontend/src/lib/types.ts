@@ -12,10 +12,14 @@ export interface Hunt {
   end_time: string;
   arrival_reward: string | number;
   main_reward: string | number;
+  radius_m?: number | null;
   qr_secret?: string;
   contract_hunt_id?: number | null;
-  status: 'pending' | 'active' | 'ended' | 'expired';
+  /** pending = draft (not funded); active = live; upcoming / expired are computed by the API */
+  status: 'pending' | 'active' | 'upcoming' | 'ended' | 'expired';
+  /** Only the vendor's own list carries the tasks; hunters get the count until they check in. */
   tasks?: HuntTask[];
+  task_count?: number;
   created_at?: string;
 
   /* joined */

@@ -1,36 +1,48 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAccount, useConnect } from 'wagmi';
+import { useAccount } from 'wagmi';
 import { ArrowRight } from 'lucide-react';
 import { login, OFFLINE } from '../../lib/api';
+import { useWalletConnect } from '../../lib/useWalletConnect';
 import { Logo } from '../../components/Logo';
 import { Button, RoundButton } from '../../ui';
 
 /** The promise, as three beats rather than a paragraph — matches the headline's rhythm. */
 const BEATS = ['Show up.', 'Do the task.', 'Get paid.'];
 
+/** Which side the visitor picked, kept across the wallet pop-up so we know where to send them. */
+const INTENT_KEY = 'trivvo.intent';
+type Intent = 'user' | 'vendor';
+
 /** Login — the headline is the screen. Cream half, pink base, two labelled exits. */
 export default function LoginPage() {
   const { isConnected, address } = useAccount();
-  const { connect, connectors, isPending } = useConnect();
+  const { connectWallet, isPending } = useWalletConnect();
   const navigate = useNavigate();
 
+  // Once a wallet is connected, send the visitor to the side they picked (hunters by default).
   useEffect(() => {
     if (isConnected && address) {
+      const intent = sessionStorage.getItem(INTENT_KEY);
+      sessionStorage.removeItem(INTENT_KEY);
+      if (intent === 'vendor') {
+        navigate('/vendor/dashboard');
+        return;
+      }
       login(address, 'user').catch(() => {});
       navigate('/hunts');
     }
   }, [isConnected, address, navigate]);
 
-  const handleConnect = () => {
+  const start = (intent: Intent) => {
+    const home = intent === 'vendor' ? '/vendor/dashboard' : '/hunts';
     // placeholder: no wallet needed while OFFLINE — walk straight into the app.
-    if (OFFLINE) return navigate('/hunts');
-    const connector =
-      connectors.find((c) => c.id === 'metaMask') ||
-      connectors.find((c) => c.id === 'injected') ||
-      connectors[0];
-    if (connector) connect({ connector });
+    if (OFFLINE || isConnected) return navigate(home);
+    sessionStorage.setItem(INTENT_KEY, intent);
+    connectWallet();
   };
+
+  const handleConnect = () => start('user');
 
   return (
     <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
@@ -93,7 +105,7 @@ export default function LoginPage() {
           <Button variant="ink" size="lg" block loading={isPending} onClick={handleConnect}>
             Connect wallet
           </Button>
-          <Button variant="paper" size="lg" block onClick={() => navigate('/vendor/dashboard')}>
+          <Button variant="paper" size="lg" block loading={isPending} onClick={() => start('vendor')}>
             I&apos;m a business
           </Button>
         </div>

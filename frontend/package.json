@@ -11,7 +11,10 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
+    "@worldcoin/idkit": "4.6.0",
+    "@worldcoin/idkit-core": "4.6.0",
     "axios": "^1.13.6",
+    "jsqr": "1.4.0",
     "lucide-react": "^0.577.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.0",

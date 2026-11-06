@@ -58,14 +58,15 @@ export function initials(name: string): string {
 
 const BUSINESS_KEY = 'trivvo.businessName';
 
-/** What the backend registers a vendor as until a real field exists. */
-export const DEFAULT_BUSINESS = 'Brew Lab Café';
-
+/**
+ * The business name this browser last used ('' until one is set). The server holds the real
+ * copy that hunters see; this one just saves retyping it and lets the dashboard show it instantly.
+ */
 export function businessName(): string {
   try {
-    return localStorage.getItem(BUSINESS_KEY) || DEFAULT_BUSINESS;
+    return localStorage.getItem(BUSINESS_KEY) || '';
   } catch {
-    return DEFAULT_BUSINESS;
+    return '';
   }
 }
 
@@ -74,6 +75,6 @@ export function storeBusinessName(name: string) {
     if (name.trim()) localStorage.setItem(BUSINESS_KEY, name.trim());
     else localStorage.removeItem(BUSINESS_KEY);
   } catch {
-    /* storage blocked — the default still works */
+    /* storage blocked — the server copy still works */
   }
 }

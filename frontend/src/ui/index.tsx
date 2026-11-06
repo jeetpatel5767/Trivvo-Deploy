@@ -3,6 +3,7 @@
 import React from 'react';
 import { ChevronLeft, Menu } from 'lucide-react';
 import { Mark } from '../components/Logo';
+import { span } from '../lib/time';
 
 const cx = (...p: (string | false | undefined | null)[]) => p.filter(Boolean).join(' ');
 
@@ -187,7 +188,18 @@ export function Badge({
   );
 }
 
-export function StatusBadge({ startsAt, endsAt }: { startsAt?: string | null; endsAt?: string | null }) {
+export function StatusBadge({
+  startsAt,
+  endsAt,
+  status,
+}: {
+  startsAt?: string | null;
+  endsAt?: string | null;
+  /** Stored hunt status: a draft is not live whatever the clock says. */
+  status?: string;
+}) {
+  if (status === 'pending') return <Badge tone="neutral">Not funded</Badge>;
+  if (status === 'ended') return <Badge tone="ended">Ended</Badge>;
   const now = Date.now();
   const start = startsAt ? new Date(startsAt).getTime() : null;
   const end = endsAt ? new Date(endsAt).getTime() : null;
@@ -453,9 +465,5 @@ export function timeLeft(endsAt?: string | null): string | null {
   if (!endsAt) return null;
   const ms = new Date(endsAt).getTime() - Date.now();
   if (Number.isNaN(ms) || ms <= 0) return null;
-  const days = Math.floor(ms / 86_400_000);
-  if (days >= 1) return `${days}d left`;
-  const hours = Math.floor(ms / 3_600_000);
-  if (hours >= 1) return `${hours}h left`;
-  return `${Math.max(1, Math.floor(ms / 60_000))}m left`;
+  return `${span(ms)} left`;
 }

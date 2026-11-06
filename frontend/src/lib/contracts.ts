@@ -50,6 +50,19 @@ export const HUNT_ESCROW_ABI = [
         type: 'function',
     },
     {
+        // B4: the funding page reads the new escrow hunt id from this log
+        anonymous: false,
+        inputs: [
+            { indexed: true, name: 'huntId', type: 'uint256' },
+            { indexed: true, name: 'vendor', type: 'address' },
+            { indexed: false, name: 'rewardToken', type: 'address' },
+            { indexed: false, name: 'arrivalReward', type: 'uint256' },
+            { indexed: false, name: 'mainReward', type: 'uint256' },
+        ],
+        name: 'HuntCreated',
+        type: 'event',
+    },
+    {
         inputs: [],
         name: 'nextHuntId',
         outputs: [{ name: '', type: 'uint256' }],
@@ -76,8 +89,8 @@ export const ERC20_ABI = [
     },
 ] as const;
 
-// Contract addresses (update after deployment)
+// Contract addresses: escrow from the World Chain deploy (B1); USDC defaults to Circle's World Chain Sepolia token.
 export const CONTRACTS = {
     HUNT_ESCROW: import.meta.env.VITE_HUNT_ESCROW_ADDRESS || '0x0000000000000000000000000000000000000000',
-    USDC_TOKEN: import.meta.env.VITE_USDC_TOKEN_ADDRESS || '0x0000000000000000000000000000000000000000',
+    USDC_TOKEN: import.meta.env.VITE_USDC_TOKEN_ADDRESS || '0x66145f38cBAC35Ca6F1Dfb4914dF98F1614aeA88',
 };
