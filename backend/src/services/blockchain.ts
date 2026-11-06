@@ -12,6 +12,7 @@ const ESCROW_ABI = [
     'function getHunt(uint256 _huntId) external view returns (tuple(uint256 huntId, address vendor, address rewardToken, uint256 arrivalReward, uint256 mainReward, uint256 remainingFunds, uint256 startTime, uint256 endTime, bool active))',
     'function isHuntActive(uint256 _huntId) external view returns (bool)',
     'event HuntFunded(uint256 indexed huntId, uint256 amount, uint256 totalFunds)',
+    'event FundsWithdrawn(uint256 indexed huntId, address indexed vendor, uint256 amount)',
 ];
 
 /** World Chain Sepolia by default (D8). Any EVM chain works through env. */
@@ -145,6 +146,26 @@ class BlockchainService {
                 endTime: Number(h.endTime),
                 active: Boolean(h.active),
             },
+        };
+    }
+
+    /** Read a vendor's withdrawRemaining transaction from the chain (same rule as funding). */
+    async readWithdrawal(txHash: string): Promise<{ contractHuntId?: number; vendor?: string; amount?: string; code?: string }> {
+        if (!this.isConfigured || !this.escrowContract) return { code: 'chain_not_configured' };
+        if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return { code: 'bad_tx_hash' };
+        const receipt = await this.provider.getTransactionReceipt(txHash);
+        if (!receipt) return { code: 'tx_not_found' };
+        if (receipt.status !== 1) return { code: 'tx_failed' };
+        const iface = this.escrowContract.interface;
+        const ev = receipt.logs
+            .filter((l) => l.address.toLowerCase() === this.escrowAddress)
+            .map((l) => { try { return iface.parseLog(l); } catch { return null; } })
+            .find((e) => e?.name === 'FundsWithdrawn');
+        if (!ev) return { code: 'not_a_withdrawal_tx' };
+        return {
+            contractHuntId: Number(ev.args.huntId),
+            vendor: String(ev.args.vendor).toLowerCase(),
+            amount: ethers.formatUnits(ev.args.amount, USDC_DECIMALS),
         };
     }
 }
