@@ -80,6 +80,16 @@ export default function TasksPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [huntId]);
 
+  // While a photo is with the vendor, check back every 10s so their approval (and the payout it
+  // triggers) shows up without a reload.
+  const waitingOnVendor = (progress ?? []).some((t) => t.status === 'vendor_review');
+  useEffect(() => {
+    if (!waitingOnVendor) return;
+    const timer = setInterval(() => void load(), 10_000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waitingOnVendor, huntId]);
+
   const submitPhoto = async (taskIndex: number, file: File) => {
     if (!huntId || busyTask !== null) return;
     setBusyTask(taskIndex);
@@ -277,10 +287,10 @@ export default function TasksPage() {
           <Block tight>
             <p className="body-sm t-muted">
               {allApproved
-                ? 'Every task passed. Claim your reward.'
+                ? 'Every task passed. Your reward is on its way to your wallet.'
                 : anyReviewing
-                  ? 'Some photos are with the vendor. You can claim once everything is approved.'
-                  : 'Each photo is checked in seconds. When all pass, the reward is released.'}
+                  ? 'Some photos are with the vendor. Your reward is sent as soon as they approve.'
+                  : 'Each photo is checked in seconds. When all pass, the reward is sent automatically.'}
             </p>
           </Block>
         </Panel>
@@ -294,7 +304,7 @@ export default function TasksPage() {
           disabled={!allApproved}
           onClick={() => navigate('/reward-confirm', { state: { ...state, huntId } })}
         >
-          {allApproved ? 'Claim reward' : 'Finish every task to claim'}
+          {allApproved ? 'See your reward' : 'Finish every task to get paid'}
         </Button>
       </div>
     </div>
