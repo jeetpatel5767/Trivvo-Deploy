@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { Download, Printer } from 'lucide-react';
-import { getHunt } from '../../lib/api';
+import { getHunt, getHuntQr } from '../../lib/api';
 import type { Hunt } from '../../lib/types';
 import { AppBar, Block, Button, IconStrip, Panel, Skeleton } from '../../ui';
 import { Icon } from '../../components/Icon';
@@ -12,17 +12,26 @@ export default function QRCodePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [hunt, setHunt] = useState<Hunt | null>(null);
+  const [qrSecret, setQrSecret] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     getHunt(id)
       .then((res) => setHunt(res.data.hunt))
+      .catch(() => {});
+    // The secret comes from an owner-only endpoint; asks for the wallet signature if needed.
+    getHuntQr(id)
+      .then((res) => setQrSecret(res.data.qrSecret))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [id]);
 
-  const qrData = `${id}:${hunt?.qr_secret ?? `demo_secret_${id}`}`;
+  // C1: the QR is a URL any phone camera can open, not an opaque "id:secret" string.
+  // Scanned on a phone it lands on /h/:id?k=<secret>, which forwards into the arrival flow.
+  const qrData = qrSecret
+    ? `${window.location.origin}/h/${id}?k=${encodeURIComponent(qrSecret)}`
+    : '';
 
   const download = () => {
     const svg = document.querySelector('.qr-target svg') as SVGSVGElement;
@@ -61,6 +70,10 @@ export default function QRCodePage() {
         <Block>
           {loading ? (
             <Skeleton h={250} r={14} />
+          ) : !qrSecret ? (
+            <p className="body-sm t-muted" style={{ textAlign: 'center', padding: '40px 0' }}>
+              Only the business that created this hunt can see its code. Connect that wallet and try again.
+            </p>
           ) : (
             <div className="qr-target" style={{ display: 'flex', justifyContent: 'center', padding: 6 }}>
               <QRCodeSVG value={qrData} size={248} bgColor="#FFFFFF" fgColor="#10231C" level="M" />

@@ -4,7 +4,7 @@ import { businessName, storeBusinessName } from '../../lib/displayName';
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, CheckCircle2, Pencil } from 'lucide-react';
-import { login, getHunts } from '../../lib/api';
+import { login, getMyHunts, getMyVendor, saveBusinessName } from '../../lib/api';
 import { useDemoAccount } from '../../lib/demoAccount';
 import { totalReward, type Hunt } from '../../lib/types';
 import { VendorSidebar } from '../../components/VendorSidebar';
@@ -35,13 +35,48 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isConnected || !address) return setLoading(false);
-    login(address, 'vendor', 'My Business').catch(() => {});
-    getHunts()
+    if (!isConnected || !address) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLoading(false);
+      return;
+    }
+    // Register the vendor, then sync the business name both ways: the server copy is what
+    // hunters see, so adopt it here; if only this browser has a name, send it up.
+    login(address, 'vendor', businessName() || undefined)
+      .then(() => getMyVendor())
+      .then((res) => {
+        const saved = res.data.businessName as string | null;
+        if (saved) {
+          storeBusinessName(saved);
+          setShop(saved);
+        } else if (businessName()) {
+          void saveBusinessName(businessName());
+        }
+      })
+      .catch(() => {});
+    getMyHunts()
       .then((res) => setHunts(res.data.hunts || []))
       .catch(() => setHunts([]))
       .finally(() => setLoading(false));
   }, [isConnected, address]);
+
+  /** Save the name to the server so hunters see it; keep a local copy so it shows instantly next time. */
+  const saveShop = async () => {
+    const name = shopDraft.trim();
+    if (!name) {
+      toast.show('Enter your business name.');
+      return;
+    }
+    try {
+      await saveBusinessName(name);
+      storeBusinessName(name);
+      setShop(name);
+      setEditingShop(false);
+      toast.show('Business name updated');
+    } catch {
+      toast.show('That did not save. Try again.');
+    }
+  };
 
   const staked = useMemo(() => hunts.reduce((s, h) => s + totalReward(h), 0), [hunts]);
   const live = useMemo(() => hunts.filter((h) => h.status === 'active').length, [hunts]);
@@ -73,7 +108,7 @@ export default function DashboardPage() {
                   fontWeight: 700,
                 }}
               >
-                <span className="truncate">{shop}</span>
+                <span className="truncate">{shop || 'Add your business name'}</span>
                 <Pencil size={13} strokeWidth={2.4} style={{ flex: 'none', opacity: 0.7 }} />
               </button>
             }
@@ -137,31 +172,18 @@ export default function DashboardPage() {
             value={shopDraft}
             onChange={(e) => setShopDraft(e.target.value)}
             placeholder="Brew Lab Café"
-            maxLength={34}
+            maxLength={60}
             autoFocus
             onKeyDown={(e) => {
-              if (e.key !== 'Enter') return;
-              storeBusinessName(shopDraft);
-              setShop(shopDraft.trim() || 'Brew Lab Café');
-              setEditingShop(false);
+              if (e.key === 'Enter') void saveShop();
             }}
           />
           <p className="caption t-subtle" style={{ marginTop: 10 }}>
-            Shown to hunters on your hunts. Stored on this device for now.
+            Shown to hunters on all of your hunts.
           </p>
         </div>
         <div style={{ marginTop: 20 }}>
-          <Button
-            variant="ink"
-            size="lg"
-            block
-            onClick={() => {
-              storeBusinessName(shopDraft);
-              setShop(shopDraft.trim() || 'Brew Lab Café');
-              setEditingShop(false);
-              toast.show('Business name updated');
-            }}
-          >
+          <Button variant="ink" size="lg" block onClick={() => void saveShop()}>
             Save
           </Button>
         </div>

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getParticipants } from '../../lib/api';
-import { DEMO_PARTICIPANTS } from '../../lib/demoData';
 import type { Participant } from '../../lib/types';
 import { AppBar, EmptyState, Panel, SectionLabel, Tiles, shortAddress } from '../../ui';
 import { Icon } from '../../components/Icon';
@@ -16,15 +15,14 @@ const when = (ts?: unknown) => {
 export default function ParticipantsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [participants, setParticipants] = useState<Participant[]>(DEMO_PARTICIPANTS as unknown as Participant[]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     getParticipants(id)
-      .then((res) => {
-        if (res.data.participants?.length) setParticipants(res.data.participants);
-      })
-      .catch(() => {});
+      .then((res) => setParticipants(res.data.participants || []))
+      .catch(() => setFailed(true));
   }, [id]);
 
   const paid = participants.filter((p) => p.reward_tx_hash).length;
@@ -51,7 +49,9 @@ export default function ParticipantsPage() {
       <section style={{ marginTop: 28 }}>
         <SectionLabel icon={<Icon name="friends" set="objects" size={16} />}>Everyone so far</SectionLabel>
         <Panel>
-          {participants.length === 0 ? (
+          {failed ? (
+            <EmptyState icon={<Icon name="friends" set="objects" size={26} />} title="Could not load hunters" body="Only the business that created this hunt can see who joined. Check your wallet and connection." />
+          ) : participants.length === 0 ? (
             <EmptyState icon={<Icon name="friends" set="objects" size={26} />} title="No hunters yet" body="They show up as soon as someone scans your code." />
           ) : (
             <table className="table">

@@ -21,6 +21,7 @@ import {
   shortAddress,
   timeLeft,
 } from '../../ui';
+import { formatWindow, startsIn, useNow } from '../../lib/time';
 
 /** Hunt manage — ink hero, flush data panels. */
 export default function HuntManagePage() {
@@ -31,6 +32,7 @@ export default function HuntManagePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [withdrawing, setWithdrawing] = useState(false);
+  useNow(30_000); // keeps "Starts in" / "left" and the status badge moving without a reload
 
   const { writeContract: withdrawOnChain, data: withdrawTx, error: chainError } = useWriteContract();
   const { isSuccess: withdrawDone } = useWaitForTransactionReceipt({ hash: withdrawTx });
@@ -65,7 +67,8 @@ export default function HuntManagePage() {
 
   useEffect(() => {
     if (chainError) {
-      setError((chainError as any).shortMessage || chainError.message);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setError((chainError as { shortMessage?: string }).shortMessage || chainError.message);
       setWithdrawing(false);
     }
   }, [chainError]);
@@ -113,7 +116,8 @@ export default function HuntManagePage() {
     );
   }
 
-  const remaining = timeLeft(hunt.end_time);
+  const remaining = startsIn(hunt.start_time) ?? timeLeft(hunt.end_time);
+  const runWindow = formatWindow(hunt.start_time, hunt.end_time);
   const paid = participants.filter((p) => p.reward_tx_hash).length;
 
   return (
@@ -122,7 +126,7 @@ export default function HuntManagePage() {
         <AppBar tone="dark" onBack={() => navigate('/vendor/dashboard')} />
 
         <div className="row-between" style={{ marginTop: 8 }}>
-          <StatusBadge startsAt={hunt.start_time} endsAt={hunt.end_time} />
+          <StatusBadge startsAt={hunt.start_time} endsAt={hunt.end_time} status={hunt.status} />
           {remaining && (
             <span className="body-sm" style={{ color: 'rgba(244,241,234,0.62)' }}>
               {remaining}
@@ -133,6 +137,11 @@ export default function HuntManagePage() {
         <h1 style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.04, letterSpacing: '-0.04em', marginTop: 18 }}>
           {hunt.title}
         </h1>
+        {runWindow && (
+          <p className="body-sm" style={{ marginTop: 10, color: 'rgba(244,241,234,0.62)' }}>
+            {runWindow}
+          </p>
+        )}
 
         <div style={{ marginTop: 28 }}>
           <span className="overline" style={{ color: 'rgba(244,241,234,0.62)' }}>
@@ -156,7 +165,7 @@ export default function HuntManagePage() {
             items={[
               { icon: <Icon name="scan" set="objects" size={22} />, label: 'QR code', onClick: () => navigate(`/vendor/qr/${hunt.hunt_id}`) },
               { icon: <Icon name="friends" set="objects" size={22} />, label: 'Hunters', onClick: () => navigate(`/vendor/participants/${hunt.hunt_id}`) },
-              { icon: <CheckCircle2 strokeWidth={2.2} />, label: 'Verify', onClick: () => navigate('/vendor/verify-task') },
+              { icon: <CheckCircle2 strokeWidth={2.2} />, label: 'Review', onClick: () => navigate(`/vendor/reviews/${hunt.hunt_id}`) },
             ]}
           />
         </Block>
