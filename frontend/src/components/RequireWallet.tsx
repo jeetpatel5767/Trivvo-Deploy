@@ -8,10 +8,10 @@ import { AppBar, Button, Skeleton } from '../ui';
  * and actions like "Create hunt" had no address to act on. Now the screen asks for the
  * wallet first, so a refresh or a direct link can never skip the connection.
  */
-export function RequireWallet({ children }: { children: React.ReactNode }) {
+export function RequireWallet({ children, hunter = false }: { children: React.ReactNode; hunter?: boolean }) {
   const navigate = useNavigate();
   const { isConnected, status } = useDemoAccount();
-  const { connectWallet, isPending } = useWalletConnect();
+  const { connectWallet, isPending, inWorldApp } = useWalletConnect();
 
   // wagmi restores a previous session on page load; don't flash the prompt while it does.
   if (status === 'connecting' || status === 'reconnecting') {
@@ -30,13 +30,16 @@ export function RequireWallet({ children }: { children: React.ReactNode }) {
     <div className="screen">
       <AppBar onBack={() => navigate('/login')} />
       <div className="pad" style={{ marginTop: 8 }}>
-        <span className="overline t-subtle">For businesses</span>
+        <span className="overline t-subtle">{hunter ? 'Before you check in' : 'For businesses'}</span>
         <h1 className="title-l" style={{ marginTop: 8 }}>
           Connect your wallet.
         </h1>
         <p className="body t-muted" style={{ marginTop: 14 }}>
-          Your wallet is how you sign in, fund hunts and get your unspent rewards back. Pick the account you want to run
-          your hunts from in MetaMask first.
+          {hunter
+            ? inWorldApp
+              ? 'Your World App wallet is where your rewards land. One tap to connect it.'
+              : 'Your rewards are paid to this wallet. Open this link in World App, or in your wallet app’s browser.'
+            : 'Your wallet is how you sign in, fund hunts and get your unspent rewards back. Pick the account you want to run your hunts from in MetaMask first.'}
         </p>
         <div style={{ marginTop: 28 }}>
           <Button variant="ink" size="lg" block loading={isPending} onClick={connectWallet}>

@@ -333,7 +333,12 @@ export default function ProfilePage() {
                   <div
                     key={i}
                     className="row"
-                    onClick={() => a.huntId && address && navigate(`/receipt/${a.huntId}?wallet=${address}`)}
+                    onClick={() => {
+                      if (!a.huntId || !address) return;
+                      // Unfinished hunt: back to its tasks (progress lives on the server); finished: its receipt.
+                      if (a.status === 'completed') navigate(`/receipt/${a.huntId}?wallet=${address}`);
+                      else navigate(`/tasks/${a.huntId}`, { state: { huntId: a.huntId, huntTitle: a.title } });
+                    }}
                     role={a.huntId ? 'button' : undefined}
                     style={{
                       gap: 12,

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ZG_MODEL, isZgConfigured } from './zgCompute';
+import { ZG_MODEL, isZgConfigured, zgHeaders } from './zgCompute';
 
 /**
  * D1: 0G writes a short "what the photo must show" rubric for each task when a hunt is
@@ -12,7 +12,6 @@ import { ZG_MODEL, isZgConfigured } from './zgCompute';
  */
 
 const BASE = process.env.ZG_BASE_URL || 'https://router-api.0g.ai/v1';
-const KEY = process.env.ZG_API_KEY || '';
 
 export interface TaskRubric {
     title: string;
@@ -34,7 +33,7 @@ async function rubricForTask(title: string): Promise<TaskRubric> {
         const res = await axios.post(
             `${BASE}/chat/completions`,
             { model: ZG_MODEL, temperature: 0.2, max_tokens: 80, messages: [{ role: 'user', content: prompt }] },
-            { headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' }, timeout: 30000, validateStatus: () => true }
+            { headers: zgHeaders(), timeout: 30000, validateStatus: () => true }
         );
         if (res.status < 200 || res.status >= 300) return fallback;
         const text = String(res.data?.choices?.[0]?.message?.content ?? '').trim().replace(/^["']|["']$/g, '');

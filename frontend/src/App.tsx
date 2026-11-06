@@ -85,10 +85,11 @@ function App() {
               {/* F3/G1: public receipt + trust timeline (no login) */}
               <Route path="/receipt/:huntId" element={<ReceiptPage />} />
               <Route path="/map/:id" element={<MapPage />} />
-              <Route path="/scan" element={<ScanPage />} />
-              <Route path="/arrival-reward" element={<ArrivalRewardPage />} />
-              <Route path="/tasks/:id" element={<TasksPage />} />
-              <Route path="/reward-confirm" element={<RewardConfirmPage />} />
+              {/* Hunter steps that pay out or sign in: a wallet first (World App wallet inside World App) */}
+              <Route path="/scan" element={<RequireWallet hunter><ScanPage /></RequireWallet>} />
+              <Route path="/arrival-reward" element={<RequireWallet hunter><ArrivalRewardPage /></RequireWallet>} />
+              <Route path="/tasks/:id" element={<RequireWallet hunter><TasksPage /></RequireWallet>} />
+              <Route path="/reward-confirm" element={<RequireWallet hunter><RewardConfirmPage /></RequireWallet>} />
               <Route path="/profile" element={<ProfilePage />} />
 
               {/* Vendor routes */}

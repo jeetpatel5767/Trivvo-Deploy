@@ -526,5 +526,29 @@
       "decision": "Test with MockUSDC (unlimited); switch to Circle test USDC only for the final demo video/judging.",
       "owner": "user"
     }
-  ]
+  ],
+  "review_2026_11_06": {
+    "fixed": [
+      "All hackathon work committed in parts on branch ethglobal-mumbai (11 commits + 4 fix commits). Not pushed.",
+      "0G: X-0G-Provider-Trust-Mode header from ZG_TRUST_MODE (must match key default); verifiable flag only true for verified/private; AI approvals now write photo_approved receipts with the 0G request id to Hedera; photo-check needs check-in, valid task, not already approved/in review, max 5 tries (no 0G call after); hunts need 1-10 tasks; rubric preview max 10.",
+      "World: /verify/world returns success (alreadyVerified) for the same wallet repeating; different wallet same human = 409 duplicate_human; arrival page tries /scan first and only shows World ID on human_check_required; WorldCheck passes backend refusal codes to the page (denied screen works); VITE_WORLD_ENV for staging/simulator.",
+      "Hunter wallet: MiniKit 2.0.3 worldApp() wagmi connector (used inside World App), MiniKit.install at startup, World Chain mainnet in wagmi chains; backend sign-in accepts Safe smart-account signatures (ERC-1271 or Safe checkSignatures, Safe only); hunter routes wrapped in RequireWallet hunter.",
+      "Profile: in-progress hunts open /tasks/:id."
+    ],
+    "tested": "fix-test 11/11 on :3003 (chain/0G/Hedera off), incl. forged contract-wallet signature refused (first version accepted WETH; fixed); A3 suite passes; tsc + vite build pass; browser: hunter wallet step, hunts, vendor guard, login render with no console errors.",
+    "not_tested": "Real World App sign-in (MiniKit signMessage -> Safe signature) and verify inside World App: needs the mini app registered and a phone. 0G with request ids: 0G TEE providers were failing on 2026-11-06; needs key trust mode change or a working provider.",
+    "manual_steps": [
+      "pc.0g.ai -> API Key -> Edit: set trust mode to verified (or create a new key), then backend/.env ZG_TRUST_MODE=verified and ZG_MODEL=0gm-1.0-35b-a3b. Or ask the 0G booth which vision model has a working TEE provider today.",
+      "developer.worldcoin.org: register the app as a Mini App with URL https://trivvo.fun; make sure VITE_WORLD_APP_ID is that app id.",
+      "Hosting: set VITE_API_URL (and VITE_WORLD_APP_ID) on trivvo.fun hosting; ZG_TRUST_MODE, SESSION_SECRET etc. on Render; redeploy."
+    ],
+    "still_open_from_review": [
+      "FundHuntPage double-fund if backend sync fails after the 3 txs",
+      "main reward only on hunter Claim (copy says Approve to pay)",
+      "RewardConfirmPage refresh shows already_paid as error",
+      "HuntManagePage withdraw: no switchChain, shows before end, backend trusts txHash",
+      "CreateHuntPage: blank location saves New York",
+      "README + world-debrief + video + submission"
+    ]
+  }
 }

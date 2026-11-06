@@ -10,13 +10,28 @@ const BASE = process.env.ZG_BASE_URL || 'https://router-api.0g.ai/v1';
 const KEY = process.env.ZG_API_KEY || '';
 export const ZG_MODEL = process.env.ZG_MODEL || '0gm-1.0-35b-a3b';
 
+/**
+ * 0G routing trust mode, sent as X-0G-Provider-Trust-Mode. It must match the API key's
+ * default (set in the PC dashboard) or the router refuses with trust_mode_mismatch.
+ *   standard: any provider, not attested · verified: attested (TeeTLS/TeeML) · private: TeeML enclave only
+ */
+export const ZG_TRUST_MODE = (process.env.ZG_TRUST_MODE || 'private').toLowerCase();
+
+/** Headers for every 0G call. Only verified/private runs are attested, so only they count as verifiable. */
+export const zgHeaders = () => ({
+    Authorization: `Bearer ${KEY}`,
+    'Content-Type': 'application/json',
+    'X-0G-Provider-Trust-Mode': ZG_TRUST_MODE,
+});
+export const ZG_VERIFIABLE = ZG_TRUST_MODE === 'verified' || ZG_TRUST_MODE === 'private';
+
 export interface PhotoVerdict {
     ok: boolean;
     confidence: number;      // 0..1
     reason: string;
     requestId: string;       // 0G / Router completion id, shown to the user and stored
     model: string;
-    verifiable: boolean;     // true when the model runs in a TEE (per model list)
+    verifiable: boolean;     // true only when routed in verified/private (attested) mode
 }
 
 export function isZgConfigured(): boolean {
@@ -50,7 +65,7 @@ export async function verifyPhotoWithZg(taskText: string, imageDataUrl: string):
             }],
         },
         {
-            headers: { Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+            headers: zgHeaders(),
             timeout: 60000,
             validateStatus: () => true,
         }
@@ -70,7 +85,7 @@ export async function verifyPhotoWithZg(taskText: string, imageDataUrl: string):
         reason: parsed.reason,
         requestId,
         model: ZG_MODEL,
-        verifiable: true,
+        verifiable: ZG_VERIFIABLE,
     };
 }
 

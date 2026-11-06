@@ -4,6 +4,7 @@ import { verifyPhotoWithZg, isZgConfigured } from '../services/zgCompute';
 import { decideOutcome, MAX_PHOTO_ATTEMPTS, AiResult } from '../services/photoDecision';
 import { getHuntProgress } from '../services/taskProgress';
 import { promptForTask } from '../services/rubric';
+import { recordReceipt } from '../services/hederaReceipts';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -42,21 +43,21 @@ router.post('/photo-check', requireAuth, async (req: Request, res: Response) => 
         }
         const wallet = (req as any).walletAddress as string;
 
+        // Every attempt is a paid 0G call, so only a checked-in hunter, on a real task, still open, gets one.
+        const progress = await getHuntProgress(huntId, wallet);
+        if (!progress) return res.status(404).json({ error: 'Hunt not found', code: 'hunt_not_found' });
+        if (!progress.arrived) return res.status(403).json({ error: 'Check in at the venue first.', code: 'not_arrived' });
+        const task = Number.isInteger(taskIndex) ? progress.tasks[taskIndex as number] : undefined;
+        if (!task) return res.status(400).json({ error: 'That task does not exist.', code: 'bad_task' });
+        if (task.status === 'approved') return res.status(409).json({ error: 'This task is already done.', code: 'already_approved' });
+        if (task.status === 'vendor_review') return res.status(409).json({ error: 'The vendor is reviewing this photo.', code: 'in_review' });
+        if (task.attemptsLeft <= 0) return res.status(429).json({ error: 'No tries left for this task.', code: 'no_attempts_left' });
+
         // D1: judge against the hunt's stored rubric for this task (server-side, not the client's text).
         const huntRow = (await pool.query('SELECT tasks FROM hunts WHERE hunt_id = $1', [huntId])).rows[0];
-        const storedTasks = Array.isArray(huntRow?.tasks) ? huntRow.tasks : [];
-        const storedTask = storedTasks[taskIndex as number];
+        const storedTask = (Array.isArray(huntRow?.tasks) ? huntRow.tasks : [])[taskIndex as number];
         const judgeText = storedTask ? promptForTask(storedTask) : taskText;
-
-        // Attempts used so far for this task
-        const used = await pool.query(
-            'SELECT COUNT(*)::int AS n FROM task_proofs WHERE hunt_id=$1 AND wallet_address=$2 AND task_index=$3',
-            [huntId, wallet, taskIndex]
-        );
-        const attemptsSoFar = used.rows[0].n;
-        if (attemptsSoFar >= MAX_PHOTO_ATTEMPTS) {
-            // Out of retries: vendor reviews
-        }
+        const attemptsSoFar = task.attemptsUsed;
 
         // Ask 0G (null when unavailable). D3: any failure -> ai stays null -> vendor_review.
         let ai: AiResult | null = null;
@@ -91,6 +92,14 @@ router.post('/photo-check', requireAuth, async (req: Request, res: Response) => 
             [huntId, wallet, taskIndex, attempt, decision.status,
              ai ? ai.ok : null, ai ? ai.confidence : null, decision.reason, ai ? ai.requestId : null, imageDataUrl]
         );
+
+        // F1: an AI approval is the main 0G trust moment, so it goes on the public Hedera trail too.
+        if (decision.status === 'approved' && ai) {
+            await recordReceipt({
+                huntId, type: 'photo_approved', wallet, zgRequestId: ai.requestId,
+                detail: { taskIndex, by: '0g', model: aiModel, confidence: ai.confidence },
+            });
+        }
 
         return res.json({
             status: decision.status,

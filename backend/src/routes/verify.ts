@@ -70,6 +70,15 @@ router.post('/verify/world', requireAuth, async (req: Request, res: Response) =>
             );
         } catch (dbErr: any) {
             if (dbErr.code === '23505') {
+                // Same human, same hunt, same check. Same wallet = a harmless repeat (refresh, coming back);
+                // a different wallet = one person trying to claim twice.
+                const prior = await pool.query(
+                    `SELECT wallet_address FROM nullifiers WHERE hunt_id = $1 AND nullifier_hash = $2 AND action = $3`,
+                    [huntId, check.nullifier, action.replace('tr-vvo-', '')]
+                );
+                if (prior.rows[0]?.wallet_address === wallet) {
+                    return res.json({ success: true, action, nullifierHash: check.nullifier, alreadyVerified: true });
+                }
                 return res.status(409).json({ success: false, code: 'duplicate_human', error: 'This verified human has already claimed in this hunt.' });
             }
             throw dbErr;

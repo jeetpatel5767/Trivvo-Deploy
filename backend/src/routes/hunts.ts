@@ -8,6 +8,7 @@ import { buildRubrics } from '../services/rubric';
 import { requireAuth, isHuntOwner } from '../middleware/auth';
 
 const router = Router();
+const MAX_TASKS = 10;
 
 /** Every hunt that leaves a public route goes through here: the QR secret never does (A2). */
 function applyDynamicStatus(hunt: any) {
@@ -137,6 +138,8 @@ router.post('/hunts/rubric-preview', requireAuth, async (req: Request, res: Resp
     try {
         const titles = (req.body?.titles as unknown[] | undefined) || [];
         if (!Array.isArray(titles)) return res.status(400).json({ error: 'titles must be an array' });
+        // Each title is one paid 0G call.
+        if (titles.length > MAX_TASKS) return res.status(400).json({ error: `At most ${MAX_TASKS} tasks per hunt.`, code: 'too_many_tasks' });
         const rubrics = await buildRubrics(titles.map((t) => String(t || '')));
         return res.json({ tasks: rubrics });
     } catch (error: any) {
@@ -170,7 +173,11 @@ router.post('/hunts', requireAuth, async (req: Request, res: Response) => {
 
         // D1: normalise tasks to titles, then let 0G write a photo rubric for each.
         // If the vendor already sent rubric objects (edited on the create screen), keep them.
-        const rawTasks: any[] = Array.isArray(tasks) ? tasks : [];
+        const rawTasks: any[] = (Array.isArray(tasks) ? tasks : []).filter((t: any) => (typeof t === 'string' ? t : t?.title)?.trim());
+        // A hunt needs at least one task (the main reward is paid when all tasks pass) and each task costs 0G calls.
+        if (rawTasks.length < 1 || rawTasks.length > MAX_TASKS) {
+            return res.status(400).json({ error: `Add between 1 and ${MAX_TASKS} tasks.`, code: 'bad_task_count' });
+        }
         const titles = rawTasks.map((t) => (typeof t === 'string' ? t : t?.title || ''));
         const needRubrics = rawTasks.some((t) => typeof t === 'string' || !t?.rubric);
         const rubrics = needRubrics ? await buildRubrics(titles) : null;

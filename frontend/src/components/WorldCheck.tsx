@@ -35,6 +35,9 @@ const WORLD_APP_ID =
 
 type WorldAction = 'tr-vvo-arrival' | 'tr-vvo-main';
 
+/** 'staging' pairs with an app_staging_ id and the World ID simulator; production by default. */
+const WORLD_ENV = (import.meta.env.VITE_WORLD_ENV as 'production' | 'staging' | undefined) || 'production';
+
 interface RpContext {
   rp_id: string;
   nonce: string;
@@ -48,11 +51,14 @@ export function WorldCheck({
   walletAddress,
   action = 'tr-vvo-arrival',
   onVerified,
+  onRefused,
 }: {
   huntId: string;
   walletAddress: string;
   action?: WorldAction;
   onVerified: (nullifierHash?: string) => void;
+  /** The backend refused the proof (e.g. duplicate_human): the page shows its own denied state. */
+  onRefused?: (code: string, message: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [rpContext, setRpContext] = useState<RpContext | null>(null);
@@ -87,11 +93,29 @@ export function WorldCheck({
   // Carries the backend's nullifier from handleVerify to onSuccess (a ref, not render state).
   const nullifierRef = useRef<string | undefined>(undefined);
 
+  // IDKit swallows errors thrown in handleVerify and reports only 'failed_by_host_app',
+  // so the backend's own code is kept here and read back in onError.
+  const refusalRef = useRef<{ code: string; message: string } | null>(null);
+
   const send = async (result: IDKitResult): Promise<void> => {
-    const { data } = await api.post('/verify/world', { huntId, walletAddress, action, result });
-    if (!data?.success) throw new Error(data?.error || 'Human check failed');
-    nullifierRef.current = data.nullifierHash as string | undefined;
+    try {
+      const { data } = await api.post('/verify/world', { huntId, walletAddress, action, result });
+      if (!data?.success) throw new Error(data?.error || 'Human check failed');
+      nullifierRef.current = data.nullifierHash as string | undefined;
+    } catch (e: unknown) {
+      const d = (e as { response?: { data?: { code?: string; error?: string } } })?.response?.data;
+      refusalRef.current = { code: d?.code || 'verification_failed', message: d?.error || 'Human check failed. Try again.' };
+      throw e;
+    }
   };
+
+  const handleError = (code: string) => {
+    const refusal = refusalRef.current;
+    refusalRef.current = null;
+    if (refusal && onRefused) return onRefused(refusal.code, refusal.message);
+    setError(refusal?.message || `Human check not completed (${code}). Try again.`);
+  };
+
 
   // The proof this action asks for. Arrival: any unique human (legacy proofs allowed).
   // Main: a stronger v4 credential (passport OR selfie OR mnc), no legacy.
@@ -135,6 +159,7 @@ export function WorldCheck({
             app_id={WORLD_APP_ID}
             action={action}
             rp_context={rpContext}
+            environment={WORLD_ENV}
             allow_legacy_proofs={false}
             constraints={strongConstraints}
             handleVerify={async (result: IDKitResult) => {
@@ -144,7 +169,7 @@ export function WorldCheck({
               setOpen(false);
               onVerified(nullifierRef.current);
             }}
-            onError={(code) => setError(`Human check not completed (${code}). Try again.`)}
+            onError={handleError}
           />
         ) : (
           <IDKitRequestWidget
@@ -153,6 +178,7 @@ export function WorldCheck({
             app_id={WORLD_APP_ID}
             action={action}
             rp_context={rpContext}
+            environment={WORLD_ENV}
             allow_legacy_proofs={true}
             preset={proofOfHuman({ signal: walletAddress })}
             handleVerify={async (result: IDKitResult) => {
@@ -162,7 +188,7 @@ export function WorldCheck({
               setOpen(false);
               onVerified(nullifierRef.current);
             }}
-            onError={(code) => setError(`Human check not completed (${code}). Try again.`)}
+            onError={handleError}
           />
         ))}
     </Panel>

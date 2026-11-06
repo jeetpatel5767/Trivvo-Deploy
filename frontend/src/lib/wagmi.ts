@@ -1,6 +1,7 @@
 import { http, createConfig } from 'wagmi';
-import { hardhat, worldchainSepolia } from 'wagmi/chains';
+import { hardhat, worldchain, worldchainSepolia } from 'wagmi/chains';
 import { injected } from 'wagmi/connectors';
+import { worldApp } from '@worldcoin/minikit-js/wagmi';
 
 /**
  * B3: the escrow lives on World Chain Sepolia (D8).
@@ -9,10 +10,13 @@ import { injected } from 'wagmi/connectors';
 export const APP_CHAIN = Number(import.meta.env.VITE_CHAIN_ID) === hardhat.id ? hardhat : worldchainSepolia;
 
 export const config = createConfig({
-    chains: [worldchainSepolia, hardhat],
-    connectors: [injected()],
+    // worldchain (480) is listed because the World App wallet always reports it; hunters there only sign messages.
+    chains: [worldchainSepolia, worldchain, hardhat],
+    // Inside World App the hunter's own World App wallet is used (MiniKit); everywhere else a browser wallet.
+    connectors: [worldApp(), injected()],
     transports: {
         [worldchainSepolia.id]: http(),
+        [worldchain.id]: http(),
         [hardhat.id]: http('http://127.0.0.1:8545'),
     },
 });

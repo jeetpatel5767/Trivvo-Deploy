@@ -5,12 +5,12 @@ import { checkSignIn, createSession, requireAuth } from '../middleware/auth';
 const router = Router();
 
 // POST /api/auth/session — exchange a signed sign-in message for a session token (A1)
-router.post('/auth/session', (req: Request, res: Response) => {
+router.post('/auth/session', async (req: Request, res: Response) => {
     const { message, signature } = req.body as { message?: string; signature?: string };
     if (!message || !signature) {
         return res.status(400).json({ error: 'message and signature are required', code: 'bad_request' });
     }
-    const check = checkSignIn(message, signature);
+    const check = await checkSignIn(message, signature);
     if (!check.wallet) {
         return res.status(401).json({ error: 'Sign-in was not accepted. Try again.', code: check.code });
     }
