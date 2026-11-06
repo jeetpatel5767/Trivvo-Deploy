@@ -5,7 +5,8 @@
     "scripts": {
         "compile": "npx hardhat compile",
         "test": "npx hardhat test",
-        "deploy:fuji": "npx hardhat run scripts/deploy.ts --network fuji"
+        "deploy:fuji": "npx hardhat run scripts/deploy.ts --network fuji",
+        "deploy:worldchain": "npx hardhat run scripts/deploy-worldchain.ts --network worldchainSepolia"
     },
     "devDependencies": {
         "@nomicfoundation/hardhat-toolbox": "^5.0.0",
