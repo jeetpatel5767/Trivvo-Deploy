@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { MapPin } from 'lucide-react';
 import { Block, Money, Panel, StatusBadge, formatAmount, timeLeft } from '../ui';
+import { startsIn } from '../lib/time';
 import { totalReward, type Hunt } from '../lib/types';
 import { Icon, huntIconName } from './Icon';
 
@@ -19,7 +20,7 @@ export function HuntCard({ hunt, variant = 'v3' }: { hunt: Hunt; variant?: HuntC
 
 function HuntCardV1({ hunt }: { hunt: Hunt }) {
   const navigate = useNavigate();
-  const remaining = timeLeft(hunt.end_time);
+  const remaining = startsIn(hunt.start_time) ?? timeLeft(hunt.end_time);
   const place = [hunt.business_name, hunt.location_name].filter(Boolean).join(' · ');
   const hunters = hunt.active_participants;
   const showHunters = hunters != null && hunters > 0;
@@ -78,7 +79,7 @@ function HuntCardV1({ hunt }: { hunt: Hunt }) {
 
 function HuntCardV2({ hunt }: { hunt: Hunt }) {
   const navigate = useNavigate();
-  const remaining = timeLeft(hunt.end_time);
+  const remaining = startsIn(hunt.start_time) ?? timeLeft(hunt.end_time);
   const place = [hunt.business_name, hunt.location_name].filter(Boolean).join(' · ');
   const hunters = hunt.active_participants;
   const showHunters = hunters != null && hunters > 0;
@@ -138,7 +139,7 @@ function HuntCardV2({ hunt }: { hunt: Hunt }) {
 
 function HuntCardV3({ hunt }: { hunt: Hunt }) {
   const navigate = useNavigate();
-  const remaining = timeLeft(hunt.end_time);
+  const remaining = startsIn(hunt.start_time) ?? timeLeft(hunt.end_time);
   const hunters = hunt.active_participants;
 
   const meta = [

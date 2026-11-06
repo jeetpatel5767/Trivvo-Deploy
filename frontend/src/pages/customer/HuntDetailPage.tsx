@@ -1,9 +1,8 @@
 import { Icon } from '../../components/Icon';
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Lock } from 'lucide-react';
-import { getHunt } from '../../lib/api';
-import { findDemoHunt, DEMO_HUNTS } from '../../lib/demoData';
+import { Lock, ShieldCheck, ExternalLink } from 'lucide-react';
+import { getHunt, getVendorTrust } from '../../lib/api';
 import { totalReward, type Hunt } from '../../lib/types';
 import {
   AppBar,
@@ -13,15 +12,12 @@ import {
   IconStrip,
   Money,
   Panel,
-  SectionLabel,
   StatusBadge,
   Tiles,
   hasEnded,
   timeLeft,
 } from '../../ui';
-
-const taskLabel = (t: unknown, i: number) =>
-  typeof t === 'string' ? t : ((t as { title?: string })?.title ?? `Task ${i + 1}`);
+import { startsIn, useNow } from '../../lib/time';
 
 /** Hunt detail — pink hero owns the payout, flush panels carry the rest. */
 export default function HuntDetailPage() {
@@ -29,11 +25,24 @@ export default function HuntDetailPage() {
   const navigate = useNavigate();
   const [hunt, setHunt] = useState<Hunt | null>(null);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [verifiedPayouts, setVerifiedPayouts] = useState(0);
+  useNow(30_000); // Upcoming -> Live happens on the clock, so re-render without a manual reload
 
   useEffect(() => {
     getHunt(id!)
-      .then((res) => setHunt(res.data.hunt))
-      .catch(() => setHunt(findDemoHunt(id) || DEMO_HUNTS[0]))
+      .then((res) => {
+        const h = res.data.hunt as Hunt;
+        setHunt(h);
+        // F4: "N payouts verified on Hedera" for this hunt's vendor.
+        if (h.vendor_wallet) {
+          getVendorTrust(h.vendor_wallet)
+            .then((r) => setVerifiedPayouts(Number(r.data.verifiedPayouts) || 0))
+            .catch(() => {});
+        }
+      })
+      // 404 = no such hunt; anything else = we could not reach the server
+      .catch((err) => setFailed(err?.response?.status !== 404))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -54,7 +63,7 @@ export default function HuntDetailPage() {
       <div className="screen">
         <AppBar onBack={() => navigate('/hunts')} />
         <div className="pad">
-          <h1 className="title-l">We could not find that hunt.</h1>
+          <h1 className="title-l">{failed ? 'That hunt did not load. Check your connection.' : 'We could not find that hunt.'}</h1>
           <div style={{ marginTop: 24 }}>
             <Button variant="primary" size="lg" block onClick={() => navigate('/hunts')}>
               Back to hunts
@@ -65,9 +74,9 @@ export default function HuntDetailPage() {
     );
   }
 
-  const remaining = timeLeft(hunt.end_time);
+  const remaining = startsIn(hunt.start_time) ?? timeLeft(hunt.end_time);
   const ended = hasEnded(hunt.end_time);
-  const tasks = Array.isArray(hunt.tasks) ? hunt.tasks : [];
+  const taskCount = hunt.task_count ?? 0;
 
   return (
     <div className="screen">
@@ -117,31 +126,43 @@ export default function HuntDetailPage() {
         </Block>
       </Panel>
 
+      {/* F4 trust count + F3 public receipt link */}
+      <div className="pad" style={{ marginTop: 24 }}>
+        <div className="row-between">
+          <span className="row" style={{ gap: 8 }}>
+            <ShieldCheck size={16} strokeWidth={2.4} style={{ color: 'var(--ink-subtle)' }} />
+            <span className="body-sm t-muted">
+              {verifiedPayouts > 0 ? `${verifiedPayouts} payouts verified on Hedera` : 'Payouts logged on Hedera'}
+            </span>
+          </span>
+          <button
+            type="button"
+            className="row"
+            style={{ gap: 5, background: 'none', padding: 0 }}
+            onClick={() => navigate(`/receipt/${hunt.hunt_id}`)}
+          >
+            <span className="label">Receipt</span>
+            <ExternalLink size={13} strokeWidth={2.4} />
+          </button>
+        </div>
+      </div>
+
       {hunt.description && (
         <div className="pad" style={{ marginTop: 28 }}>
           <p className="body t-muted">{hunt.description}</p>
         </div>
       )}
 
-      {tasks.length > 0 && (
-        <section style={{ marginTop: 32 }}>
-          <SectionLabel>
-            {tasks.length} {tasks.length === 1 ? 'task' : 'tasks'} · locked
-          </SectionLabel>
-          <Panel>
-            {tasks.map((t, i) => (
-              <Block key={i} tight>
-                <div className="row" style={{ opacity: 0.5 }}>
-                  <Lock size={15} strokeWidth={2.4} style={{ flex: 'none', color: 'var(--ink-subtle)' }} />
-                  <span className="body-sm">{taskLabel(t, i)}</span>
-                </div>
-              </Block>
-            ))}
-            <Block tight>
-              <p className="caption t-subtle">Scan at the venue to unlock</p>
-            </Block>
-          </Panel>
-        </section>
+      {/* Tasks stay a surprise: only how many there are, never what they are, until you check in. */}
+      {taskCount > 0 && (
+        <div className="pad" style={{ marginTop: 28 }}>
+          <div className="row" style={{ gap: 10 }}>
+            <Lock size={15} strokeWidth={2.4} style={{ flex: 'none', color: 'var(--ink-subtle)' }} />
+            <span className="body-sm t-muted">
+              {taskCount} {taskCount === 1 ? 'task' : 'tasks'} · revealed after you check in at the venue
+            </span>
+          </div>
+        </div>
       )}
 
       <div className="pad stack-12" style={{ marginTop: 36 }}>

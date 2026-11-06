@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { MapPin, ExternalLink } from 'lucide-react';
 import { getHunt } from '../../lib/api';
-import { findDemoHunt, DEMO_HUNTS } from '../../lib/demoData';
 import type { Hunt } from '../../lib/types';
 import { AppBar, Block, Button, Panel, Skeleton } from '../../ui';
 
@@ -16,7 +15,7 @@ export default function MapPage() {
   useEffect(() => {
     getHunt(id!)
       .then((res) => setHunt(res.data.hunt))
-      .catch(() => setHunt(findDemoHunt(id) || DEMO_HUNTS[0]))
+      .catch(() => setHunt(null))
       .finally(() => setLoading(false));
   }, [id]);
 

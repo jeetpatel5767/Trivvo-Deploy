@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDisconnect, useReadContract } from 'wagmi';
+import { APP_CHAIN } from '../../lib/wagmi';
 import { formatUnits } from 'viem';
 import { ArrowRight, ChevronRight, Copy, Pencil } from 'lucide-react';
-import { getProfile } from '../../lib/api';
+import { getProfile, getStamps } from '../../lib/api';
 import { CONTRACTS, ERC20_ABI } from '../../lib/contracts';
 import { useDemoAccount } from '../../lib/demoAccount';
 import { deriveName, initials, storeName, storedName } from '../../lib/displayName';
 import { badgesFor, progression } from '../../lib/progress';
 import { TabBar } from '../../components/TabBar';
+import { AddTokenButton } from '../../components/AddTokenButton';
 import { BadgeDisc } from '../../components/icons';
 import { Icon, huntIconName } from '../../components/Icon';
 import {
@@ -26,6 +28,7 @@ import {
 } from '../../ui';
 
 interface Activity {
+  huntId?: string;
   title: string;
   reward: string;
   timestamp?: string;
@@ -68,6 +71,7 @@ export default function ProfilePage() {
 
   const [stats, setStats] = useState({ huntsCompleted: 0, totalEarned: '0.00', currentStreak: 0 });
   const [activity, setActivity] = useState<Activity[]>([]);
+  const [stamps, setStamps] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [name, setName] = useState(() => storedName() || '');
@@ -81,12 +85,17 @@ export default function ProfilePage() {
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
+    chainId: APP_CHAIN.id,
   });
 
   const balance = usdcBalance ? parseFloat(formatUnits(usdcBalance as bigint, 6)).toFixed(2) : '0.00';
 
   useEffect(() => {
-    if (!address) return setLoading(false);
+    if (!address) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLoading(false);
+      return;
+    }
     getProfile(address)
       .then((res) => {
         setStats(res.data.stats);
@@ -94,6 +103,10 @@ export default function ProfilePage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+    // F5: real Hedera stamp count from the Mirror Node.
+    getStamps(address)
+      .then((res) => setStamps(Number(res.data.stamps) || 0))
+      .catch(() => setStamps(null));
   }, [address]);
 
   const copy = () => {
@@ -115,7 +128,8 @@ export default function ProfilePage() {
   const figures = [
     { glyph: 'target', label: 'Hunts', value: stats.huntsCompleted },
     { glyph: 'flame', label: 'Day streak', value: stats.currentStreak },
-    { glyph: 'pin', label: 'Spots found', value: spots },
+    // F5: real on-chain stamp count (Hedera). Falls back to spots-found if the Mirror Node is unreachable.
+    { glyph: 'medal', label: 'Stamps', value: stamps ?? spots },
   ];
 
   return (
@@ -319,9 +333,12 @@ export default function ProfilePage() {
                   <div
                     key={i}
                     className="row"
+                    onClick={() => a.huntId && address && navigate(`/receipt/${a.huntId}?wallet=${address}`)}
+                    role={a.huntId ? 'button' : undefined}
                     style={{
                       gap: 12,
                       padding: '15px 16px',
+                      cursor: a.huntId ? 'pointer' : 'default',
                       borderBottom: i < Math.min(activity.length, 3) - 1 ? '1px solid var(--line)' : 'none',
                     }}
                   >
@@ -418,6 +435,7 @@ export default function ProfilePage() {
               <span className="caption truncate" style={{ opacity: 0.72, display: 'block', marginTop: 2 }}>
                 {balance} in wallet now
               </span>
+              <AddTokenButton style={{ marginTop: 6, fontSize: 12 }} />
             </div>
 
             <button
