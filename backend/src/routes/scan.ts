@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db/pool';
 import { blockchainService } from '../services/blockchain';
+import { recordReceipt } from '../services/hederaReceipts';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -13,15 +15,27 @@ const router = Router();
  * 3. Store arrival_tx_hash in participants table
  * 4. Return tasks (now unlocked) + tx hash
  */
-router.post('/scan', async (req: Request, res: Response) => {
+router.post('/scan', requireAuth, async (req: Request, res: Response) => {
     try {
-        const { huntId, qrSecret, walletAddress } = req.body;
+        const { huntId, qrSecret } = req.body;
 
-        if (!huntId || !qrSecret || !walletAddress) {
-            return res.status(400).json({ error: 'Missing required fields: huntId, qrSecret, walletAddress' });
+        if (!huntId || !qrSecret) {
+            return res.status(400).json({ error: 'Missing required fields: huntId, qrSecret' });
         }
 
-        const normalizedWallet = walletAddress.toLowerCase();
+        const normalizedWallet = (req as any).walletAddress as string;
+
+        // 0. World ID gate (T10): arrival reward only after a validated human check for this wallet+hunt
+        const humanCheck = await pool.query(
+            `SELECT nullifier_hash FROM nullifiers WHERE hunt_id = $1 AND wallet_address = $2 AND action = 'arrival'`,
+            [huntId, normalizedWallet]
+        );
+        if (humanCheck.rows.length === 0) {
+            return res.status(403).json({
+                error: 'Human verification required before the arrival reward is released.',
+                code: 'human_check_required',
+            });
+        }
 
         // 1. Verify hunt exists and is active
         const huntResult = await pool.query(
@@ -38,12 +52,17 @@ router.post('/scan', async (req: Request, res: Response) => {
         const hunt = huntResult.rows[0];
 
         if (hunt.status !== 'active') {
-            return res.status(400).json({ error: 'Hunt is not active' });
+            return res.status(400).json({ error: 'Hunt is not active', code: 'not_active' });
+        }
+
+        // Expired by the clock even though stored status is still 'active' (A3 lifecycle).
+        if (hunt.end_time && new Date(hunt.end_time) < new Date()) {
+            return res.status(400).json({ error: 'This hunt has ended.', code: 'expired' });
         }
 
         // 2. Verify QR secret
         if (hunt.qr_secret !== qrSecret) {
-            return res.status(400).json({ error: 'Invalid QR code' });
+            return res.status(400).json({ error: 'Invalid QR code', code: 'bad_qr' });
         }
 
         // 3. Check if user already scanned
@@ -53,7 +72,7 @@ router.post('/scan', async (req: Request, res: Response) => {
         );
 
         if (existingParticipant.rows.length > 0) {
-            return res.status(400).json({ error: 'You have already scanned this hunt QR code' });
+            return res.status(409).json({ error: 'You have already checked in to this hunt.', code: 'already_scanned' });
         }
 
         let arrivalTxHash = '';
@@ -83,13 +102,21 @@ router.post('/scan', async (req: Request, res: Response) => {
             [huntId]
         );
 
+        // F1: public receipt for the arrival payout (non-blocking Hedera publish).
+        await recordReceipt({
+            huntId, type: 'arrival_paid', wallet: normalizedWallet, txHash: arrivalTxHash,
+            detail: { amount: hunt.arrival_reward },
+        });
+
         // 7. Return success with tasks unlocked
         return res.json({
             success: true,
             arrivalReward: hunt.arrival_reward,
+            mainReward: hunt.main_reward,
             arrivalTxHash,
             explorerUrl: blockchainService.getExplorerUrl(arrivalTxHash),
-            tasks: hunt.tasks || [],
+            // Titles only: the rubric is what the AI judges against, so hunters never get it.
+            tasks: (Array.isArray(hunt.tasks) ? hunt.tasks : []).map((t: any) => (typeof t === 'string' ? t : t?.title || '')),
             huntTitle: hunt.title,
             businessName: hunt.business_name,
         });

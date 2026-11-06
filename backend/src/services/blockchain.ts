@@ -11,16 +11,33 @@ const ESCROW_ABI = [
     'function withdrawRemaining(uint256 _huntId) external',
     'function getHunt(uint256 _huntId) external view returns (tuple(uint256 huntId, address vendor, address rewardToken, uint256 arrivalReward, uint256 mainReward, uint256 remainingFunds, uint256 startTime, uint256 endTime, bool active))',
     'function isHuntActive(uint256 _huntId) external view returns (bool)',
+    'event HuntFunded(uint256 indexed huntId, uint256 amount, uint256 totalFunds)',
 ];
+
+/** World Chain Sepolia by default (D8). Any EVM chain works through env. */
+const RPC_URL = process.env.CHAIN_RPC_URL || 'https://worldchain-sepolia.g.alchemy.com/public';
+const EXPLORER_URL = (process.env.EXPLORER_URL || 'https://sepolia.worldscan.org').replace(/\/$/, '');
+const USDC_DECIMALS = 6;
+
+export interface FundingCheck {
+    contractHuntId: number;
+    vendor: string;           // lowercase
+    arrivalReward: string;    // human units, e.g. "0.5"
+    mainReward: string;
+    startTime: number;        // unix seconds
+    endTime: number;
+    active: boolean;
+}
 
 class BlockchainService {
     private provider: ethers.JsonRpcProvider;
     private signer: ethers.Wallet | null = null;
     private escrowContract: ethers.Contract | null = null;
+    private escrowAddress = '';
     private isConfigured = false;
 
     constructor() {
-        const rpcUrl = process.env.AVALANCHE_RPC_URL || 'https://api.avax-test.network/ext/bc/C/rpc';
+        const rpcUrl = RPC_URL;
         const privateKey = process.env.PRIVATE_KEY || '';
         const contractAddress = process.env.HUNT_ESCROW_ADDRESS || '';
 
@@ -32,6 +49,7 @@ class BlockchainService {
                 this.signer = new ethers.Wallet(privateKey, this.provider);
                 if (contractAddress && contractAddress.length === 42 && contractAddress.startsWith('0x') && !contractAddress.includes('your_')) {
                     this.escrowContract = new ethers.Contract(contractAddress, ESCROW_ABI, this.signer);
+                    this.escrowAddress = contractAddress.toLowerCase();
                     this.isConfigured = true;
                     console.log('🔗 Blockchain service configured');
                 }
@@ -92,7 +110,42 @@ class BlockchainService {
     }
 
     getExplorerUrl(txHash: string): string {
-        return `https://testnet.snowtrace.io/tx/${txHash}`;
+        return `${EXPLORER_URL}/tx/${txHash}`;
+    }
+
+    get configured(): boolean {
+        return this.isConfigured;
+    }
+
+    /**
+     * B4: read a vendor's fundHunt transaction from the chain itself (never trust the browser).
+     * Returns the escrow hunt it funded, as the contract stores it, or an error code.
+     */
+    async readFunding(txHash: string): Promise<{ hunt?: FundingCheck; code?: string }> {
+        if (!this.isConfigured || !this.escrowContract) return { code: 'chain_not_configured' };
+        if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return { code: 'bad_tx_hash' };
+        const receipt = await this.provider.getTransactionReceipt(txHash);
+        if (!receipt) return { code: 'tx_not_found' };
+        if (receipt.status !== 1) return { code: 'tx_failed' };
+        const iface = this.escrowContract.interface;
+        const funded = receipt.logs
+            .filter((l) => l.address.toLowerCase() === this.escrowAddress)
+            .map((l) => { try { return iface.parseLog(l); } catch { return null; } })
+            .find((e) => e?.name === 'HuntFunded');
+        if (!funded) return { code: 'not_a_funding_tx' };
+        const id = Number(funded.args.huntId);
+        const h = await this.escrowContract.getHunt(id);
+        return {
+            hunt: {
+                contractHuntId: id,
+                vendor: String(h.vendor).toLowerCase(),
+                arrivalReward: ethers.formatUnits(h.arrivalReward, USDC_DECIMALS),
+                mainReward: ethers.formatUnits(h.mainReward, USDC_DECIMALS),
+                startTime: Number(h.startTime),
+                endTime: Number(h.endTime),
+                active: Boolean(h.active),
+            },
+        };
     }
 }
 
