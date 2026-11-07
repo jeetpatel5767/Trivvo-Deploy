@@ -76,7 +76,20 @@ export async function recordReceipt(input: ReceiptInput): Promise<string | null>
     return eventId;
 }
 
-/** HashScan link for one HCS message (used by the receipt page / timeline). */
-export function hcsMessageUrl(topicId: string, sequence: number | string): string {
-    return `https://hashscan.io/testnet/topic/${topicId}/message/${sequence}`;
+const MIRROR_URL = process.env.HEDERA_MIRROR_URL || 'https://testnet.mirrornode.hedera.com';
+const tsCache = new Map<string, string>(); // HCS messages never change, so cache forever
+
+/** HashScan link for one HCS message (receipt page / timeline). HashScan opens a message by its
+ *  consensus timestamp (/transaction/<ts>), so look it up on the Mirror Node; fall back to the topic page. */
+export async function hcsMessageUrl(topicId: string, sequence: number | string): Promise<string> {
+    const key = `${topicId}/${sequence}`;
+    let ts = tsCache.get(key);
+    if (!ts) {
+        try {
+            const r = await fetch(`${MIRROR_URL}/api/v1/topics/${topicId}/messages/${sequence}`);
+            if (r.ok) ts = ((await r.json()) as any).consensus_timestamp;
+        } catch { /* mirror down: use the topic page */ }
+        if (ts) tsCache.set(key, ts);
+    }
+    return ts ? `https://hashscan.io/testnet/transaction/${ts}` : `https://hashscan.io/testnet/topic/${topicId}`;
 }

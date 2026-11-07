@@ -10,10 +10,10 @@ const WORLD_ID_SCAN = 'https://world.org'; // nullifiers aren't individually bro
 const ZG_LABEL = '0G Private Computer';
 
 /** Shape one events row into a timeline line with the right outbound proof link. */
-function toLine(e: any) {
+async function toLine(e: any) {
     const links: Array<{ kind: string; label: string; url?: string; value?: string }> = [];
     if (e.hcs_topic_id && e.hcs_sequence != null) {
-        links.push({ kind: 'hedera', label: 'Hedera receipt', url: hcsMessageUrl(e.hcs_topic_id, e.hcs_sequence) });
+        links.push({ kind: 'hedera', label: 'Hedera receipt', url: await hcsMessageUrl(e.hcs_topic_id, e.hcs_sequence) });
     }
     if (e.tx_hash && /^0x[0-9a-fA-F]{64}$/.test(e.tx_hash)) {
         links.push({ kind: 'worldchain', label: 'World Chain tx', url: blockchainService.getExplorerUrl(e.tx_hash) });
@@ -50,7 +50,7 @@ router.get('/receipts/topic', async (req: Request, res: Response) => {
                 sequenceNumber: m.sequence_number,
                 consensusTimestamp: m.consensus_timestamp,
                 body,
-                explorerUrl: `https://hashscan.io/testnet/topic/${topic}/message/${m.sequence_number}`,
+                explorerUrl: `https://hashscan.io/testnet/transaction/${m.consensus_timestamp}`,
             };
         });
         return res.json({ topicId: topic, messages });
@@ -118,7 +118,7 @@ router.get('/receipts/:huntId', async (req: Request, res: Response) => {
             businessName: hunt.business_name,
             topicId: process.env.HEDERA_TOPIC_ID || null,
             verifiedOnHedera,
-            lines: rows.map(toLine),
+            lines: await Promise.all(rows.map(toLine)),
         });
     } catch (error: any) {
         console.error('Receipt page error:', error.message);
@@ -193,7 +193,7 @@ router.get('/hunts/:huntId/timeline', async (req: Request, res: Response) => {
             [huntId, wallet]
         )).rows;
 
-        return res.json({ huntId, wallet, steps: rows.map(toLine) });
+        return res.json({ huntId, wallet, steps: await Promise.all(rows.map(toLine)) });
     } catch (error: any) {
         console.error('Timeline error:', error.message);
         return res.status(500).json({ error: 'Failed to load the timeline' });
