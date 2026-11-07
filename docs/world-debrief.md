@@ -3,15 +3,15 @@
 ## What we built
 - **Trust moment:** money leaving a shop's escrow to a person. Before any reward is paid, the hunter proves they are a unique human **for this hunt**.
 - **Credentials (minimum sufficient):**
-  - Arrival reward (small): `tr-vvo-arrival` with the *Proof of Human* preset. Enough to stop one person farming a hunt with many wallets; keeps the most people eligible.
-  - Main reward above $5: `tr-vvo-main` asking for *Passport*, *Selfie Check* or *MNC* (`any(...)`, no legacy proofs). Harder to farm, worth the extra step only when the payout is worth it.
+  - Arrival reward (small): `tr-vvo-<huntId>-arrival` (one action per hunt, created through the Developer Portal API) with the *Proof of Human* preset. Enough to stop one person farming a hunt with many wallets; keeps the most people eligible.
+  - Main reward above $5: `tr-vvo-<huntId>-main` asking for *Passport*, *Selfie Check* or *MNC* (`any(...)`, no legacy proofs). Harder to farm, worth the extra step only when the payout is worth it.
 - **Flow:** backend signs the RP request (`POST /api/verify/world/signature`, key never leaves the server) → IDKit 4.6 widget → full result to `POST /api/verify/world` → forwarded to `developer.world.org/api/v4/verify/{rp_id}` → nullifier stored per (hunt, action) → only then does the backend call the escrow.
 - **Denied path:** the same human with a second wallet on the same hunt gets `409 duplicate_human`, the app shows "Already claimed by this human" and no money moves. A cancelled or failed check also leaves the reward locked.
 - **Mini App:** the same site runs inside World App. IDKit switches to native verification there by itself, and MiniKit's wagmi connector gives the hunter their World App wallet, so they never leave the app.
 
 ## Time to first success
 - First signed RP request + IDKit dialog opening on localhost: same day we started (2026-11-05).
-- First real proof verified and stored end to end (arrival `proof_of_human`, main `document`): 2026-11-06 (confirm the exact hours).
+- First real proof verified and stored end to end (arrival `proof_of_human`, main `document`): 2026-11-06.
 
 ## Friction
 1. **Two SDKs, unclear which one a Mini App needs.** We expected to need MiniKit's `verify` inside World App. Reading `@worldcoin/idkit-core` showed IDKit 4.6 already detects World App (`isInWorldApp`) and verifies natively, so MiniKit was only needed for the wallet. This is not obvious from the docs.

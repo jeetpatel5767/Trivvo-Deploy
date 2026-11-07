@@ -11,7 +11,7 @@ Built for **ETHGlobal Mumbai 2026, Continuity track**. Live app: https://trivvo.
 | | |
 |---|---|
 | **Before the event** | Tag [`pre-event-baseline`](../../tree/pre-event-baseline) (commit `3789411`, 2026-10-10). A working hunt app on Avalanche Fuji: vendor creates and funds a hunt in a USDC escrow, hunter checks in with a QR, vendor verifies tasks by looking at the hunter's screen and pays by typing their wallet. No identity check, no task verification, no public audit trail, payouts triggerable by anyone. |
-| **Built at the event** | Every commit after the baseline on branch `ethglobal-mumbai` (split by area: docs, database, contracts, backend, frontend, fixes). |
+| **Built at the event** | Every commit after the baseline tag on `main` ([compare](../../compare/pre-event-baseline...main)), split by area: docs, database, contracts, backend, frontend, fixes. |
 
 **New during the hackathon**
 - **World ID (IDKit 4.6) gate** on every payout: one verified human = one claim per hunt; a stronger credential for rewards above $5. Runs as a **World Mini App** (native verification inside World App, World App wallet via MiniKit) and in any browser.
@@ -27,7 +27,7 @@ Built for **ETHGlobal Mumbai 2026, Continuity track**. Live app: https://trivvo.
 
 | Sponsor | What it does in Tr!vvo | If removed |
 |---|---|---|
-| **World** (IDKit, World Chain) | Before any reward is paid the hunter proves they are a unique human for **this hunt** (`tr-vvo-arrival`, *Proof of Human*). Rewards above $5 also need a stronger credential (`tr-vvo-main`: *Passport*, *Selfie Check* or *MNC*). Proofs are verified on our backend (`POST /api/v4/verify`) and the nullifier is stored per hunt. Escrow and USDC live on World Chain. | One person with 100 wallets drains every hunt. |
+| **World** (IDKit, World Chain) | Before any reward is paid the hunter proves they are a unique human for **this hunt**: every hunt gets its own World ID actions (`tr-vvo-<huntId>-arrival` with *Proof of Human*; rewards above $5 also need `tr-vvo-<huntId>-main` with *Passport*, *Selfie Check* or *MNC*). Proofs are verified on our backend (`POST /api/verify/world` → World's `/api/v4/verify`) and the nullifier is stored per hunt. A second wallet from the same human gets "Already claimed" and no money moves. Escrow and USDC live on World Chain. | One person with 100 wallets drains every hunt. |
 | **0G Private Computer** | (1) When a hunt is created, 0G writes a one-line "what the photo must show" rubric per task. (2) Every task photo is judged by a vision model on 0G against that rubric. Approved → task passes (and if it was the last task, the main reward is paid on the spot); clear mismatch → retake with the reason (max 5); unsure or 0G down → vendor review, never a silent pass. Each verdict keeps its 0G request ID. | No automatic payouts: the vendor has to look at every photo and pay every hunter by hand. |
 | **Hedera** (HCS + HTS + Mirror Node, no Solidity) | Every event (hunt funded, human verified, arrival paid, photo approved incl. 0G request ID, reward paid, stamp sent, hunt withdrawn) is published to an HCS topic. Completing a hunt sends one TVSTAMP (HTS) to the hunter's EVM address (Hedera auto-creates the account, no Hedera wallet needed). The public receipt page, vendor trust score and stamp count read from the log and the Mirror Node. | Hunters must trust the shop's word; no public proof of payouts, no vendor reputation, no stamps. |
 
@@ -68,7 +68,7 @@ The escrow contract (`contracts/contracts/TrivvoHuntEscrow.sol`, pre-existing, u
 | A main-reward payout | [`0x34063c3c…cbf23c`](https://sepolia.worldscan.org/tx/0x34063c3c0d54966bc1bdd3f90c1c59a8aa01035d447dad70a5b03e5a98cbf23c) |
 | Hedera HCS receipt topic | [`0.0.11307164`](https://hashscan.io/testnet/topic/0.0.11307164) |
 | Hedera HTS stamp token (TVSTAMP) | [`0.0.11307168`](https://hashscan.io/testnet/token/0.0.11307168) |
-| A stamp transfer | `0.0.10505594@1793941552.702541606` |
+| A stamp transfer | [`0.0.10505594@1793941552.702541606`](https://hashscan.io/testnet/transaction/0.0.10505594-1793941552-702541606) |
 | 0G request IDs | Shown on every photo verdict in the app and stored per attempt (`task_proofs.zg_request_id`) |
 
 ---
@@ -101,7 +101,7 @@ npm run dev
 cd frontend && npm install && npm run dev
 ```
 
-**backend/.env**: `DATABASE_URL`, `SESSION_SECRET`, `PRIVATE_KEY` (operator), `CHAIN_RPC_URL`, `HUNT_ESCROW_ADDRESS`, `USDC_TOKEN_ADDRESS`, `EXPLORER_URL`, `WORLD_APP_ID`, `RP_ID`, `RP_SIGNING_KEY`, `ZG_API_KEY`, `ZG_MODEL`, `ZG_TRUST_MODE`, `HEDERA_ACCOUNT_ID`, `HEDERA_PRIVATE_KEY`, `HEDERA_KEY_TYPE`, `HEDERA_TOPIC_ID`, `HEDERA_TOKEN_ID`.
+**backend/.env**: `DATABASE_URL`, `SESSION_SECRET`, `PRIVATE_KEY` (operator), `CHAIN_RPC_URL`, `HUNT_ESCROW_ADDRESS`, `USDC_TOKEN_ADDRESS`, `EXPLORER_URL`, `WORLD_APP_ID`, `RP_ID`, `RP_SIGNING_KEY`, `WORLD_PORTAL_API_KEY` (creates the per-hunt actions), `ZG_API_KEY`, `ZG_MODEL`, `ZG_TRUST_MODE`, `HEDERA_ACCOUNT_ID`, `HEDERA_PRIVATE_KEY`, `HEDERA_KEY_TYPE`, `HEDERA_TOPIC_ID`, `HEDERA_TOKEN_ID`.
 **frontend/.env**: `VITE_API_URL`, `VITE_HUNT_ESCROW_ADDRESS`, `VITE_USDC_TOKEN_ADDRESS`, `VITE_WORLD_APP_ID`, optional `VITE_WORLD_ENV=staging` for the World ID simulator.
 
 Without `PRIVATE_KEY`/`HUNT_ESCROW_ADDRESS` the backend runs in demo mode (no on-chain money); without `ZG_API_KEY` every photo goes to vendor review.
